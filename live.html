@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live &amp; Engine — PawnPrint</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html">♟ PawnPrint</a>
+      <div class="navlinks">
+        <a href="analyze.html">Analyze PGN</a>
+        <a href="live.html" class="active">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>📡 Live &amp; Engine</h1>
+        <p class="tagline">Watch a live lichess game with move-by-move feedback, or analyze any position with Stockfish 18.</p>
+      </header>
+
+      <div class="tabbar">
+        <button class="tab active" data-mode="position">♟ Any position</button>
+        <button class="tab" data-mode="live">📡 Live lichess game</button>
+      </div>
+
+      <div class="live-layout">
+        <div class="board-col">
+          <div id="board"></div>
+          <div class="evalbar-wrap" title="Evaluation (white's perspective)">
+            <div id="evalbar" class="evalbar"><div id="evalfill" class="evalfill"></div></div>
+            <span id="evalnum" class="evalnum">0.0</span>
+          </div>
+          <div class="board-controls">
+            <button id="flip-btn" class="btn">⇅ Flip</button>
+            <span id="turn-indicator" class="turn-indicator"></span>
+          </div>
+        </div>
+
+        <div class="side-col">
+          <!-- POSITION MODE -->
+          <section class="card mode-panel" id="panel-position">
+            <h2>Analyze a position</h2>
+            <label class="stack">Paste a FEN (or leave the start position)
+              <input type="text" id="fen-input" class="text-input" placeholder="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" />
+            </label>
+            <div class="btn-row">
+              <button id="load-fen" class="btn">Load FEN</button>
+              <button id="reset-board" class="btn btn-ghost">Start position</button>
+              <button id="undo-btn" class="btn btn-ghost">↶ Undo</button>
+            </div>
+            <p class="hint">Tip: click a piece then a destination square to play moves on the board (moves are validated).</p>
+            <div class="config-row">
+              <label>Engine depth
+                <select id="depth-position">
+                  <option value="12">Depth 12</option>
+                  <option value="15" selected>Depth 15</option>
+                  <option value="18">Depth 18</option>
+                  <option value="22">Depth 22 (slow)</option>
+                </select>
+              </label>
+              <button id="suggest-btn" class="btn btn-primary">🔎 Suggest best move</button>
+              <button id="play-best-btn" class="btn" hidden>▶ Play best move</button>
+            </div>
+            <div id="engine-out" class="engine-out"></div>
+          </section>
+
+          <!-- LIVE MODE -->
+          <section class="card mode-panel" id="panel-live" hidden>
+            <h2>Watch a live lichess game</h2>
+            <label class="stack">Lichess game URL or ID
+              <input type="text" id="game-input" class="text-input" placeholder="https://lichess.org/abcd1234  or  abcd1234" />
+            </label>
+            <div class="config-row">
+              <label>Feedback depth
+                <select id="depth-live">
+                  <option value="10">Depth 10 (fast)</option>
+                  <option value="13" selected>Depth 13</option>
+                  <option value="16">Depth 16</option>
+                </select>
+              </label>
+              <button id="connect-btn" class="btn btn-primary">📡 Connect</button>
+              <button id="disconnect-btn" class="btn btn-ghost" hidden>Disconnect</button>
+            </div>
+            <div id="live-status" class="hint"></div>
+            <div id="live-players" class="live-players"></div>
+            <div id="engine-out-live" class="engine-out"></div>
+            <h3>Move feedback</h3>
+            <div id="move-feed" class="move-feed"><p class="hint">Moves and their engine assessment will appear here as the game progresses.</p></div>
+          </section>
+        </div>
+      </div>
+
+      <footer class="app-footer">
+        PawnPrint · Engine: <span id="engine-name">Stockfish 18</span> · runs locally in your browser · live games streamed via the lichess public API
+      </footer>
+    </div>
+    <script type="module" src="/src/live.ts"></script>
+  </body>
+</html>

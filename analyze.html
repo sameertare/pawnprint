@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analyze PGN — PawnPrint</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html">♟ PawnPrint</a>
+      <div class="navlinks">
+        <a href="analyze.html" class="active">Analyze PGN</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>♞ PGN Performance Analyzer</h1>
+        <p class="tagline">Deep performance analysis from your chess.com / lichess PGN files — openings, phases, tactics, patterns &amp; a training plan.</p>
+      </header>
+
+      <section class="card" id="load-card">
+        <h2><span class="step">1</span> Load games</h2>
+        <div id="dropzone" class="dropzone">
+          <p><strong>Drop PGN files here</strong> (or a previously saved report .md) — or</p>
+          <label class="btn btn-primary" for="file-input">Choose files</label>
+          <input type="file" id="file-input" multiple accept=".pgn,.md,.txt" hidden />
+          <p class="hint">Multiple files supported. Add a saved <code>report.md</code> alongside new PGNs to update it incrementally.</p>
+        </div>
+        <div id="file-summary" class="file-summary"></div>
+        <button id="load-sample" class="btn btn-ghost">…or try the bundled sample games</button>
+      </section>
+
+      <section class="card" id="config-card" hidden>
+        <h2><span class="step">2</span> Configure analysis</h2>
+        <div class="config-row">
+          <label>Player (whose games to analyze)
+            <select id="username-select"></select>
+          </label>
+          <label>Engine depth
+            <select id="depth-select">
+              <option value="8">Fast — depth 8</option>
+              <option value="12" selected>Balanced — depth 12</option>
+              <option value="16">Deep — depth 16 (slow)</option>
+              <option value="0">No engine — use PGN [%eval] tags only</option>
+            </select>
+          </label>
+          <button id="analyze-btn" class="btn btn-primary btn-lg">Analyze games</button>
+        </div>
+        <div id="progress-wrap" class="progress-wrap" hidden>
+          <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+          <p id="progress-text" class="hint"></p>
+        </div>
+      </section>
+
+      <section id="results" hidden></section>
+
+      <section class="card" id="export-card" hidden>
+        <h2><span class="step">3</span> Save &amp; track over time</h2>
+        <div class="config-row">
+          <button id="download-md" class="btn btn-primary">⬇ Download report.md</button>
+          <button id="save-server" class="btn">💾 Save on server</button>
+          <button id="load-server" class="btn">📂 Load from server</button>
+        </div>
+        <p class="hint">The .md report embeds machine-readable data. Load it back later with new PGN files and only the new games get analyzed — your history accumulates.</p>
+        <div id="server-msg" class="hint"></div>
+      </section>
+
+      <footer class="app-footer">
+        PawnPrint · analysis runs entirely in your browser with Stockfish 18 · reports are saved as Markdown you download &amp; re-upload
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

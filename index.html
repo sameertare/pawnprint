@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PawnPrint — Chess Analysis, Live Engine &amp; Swiss Pairings</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html">♟ PawnPrint</a>
+      <div class="navlinks">
+        <a href="analyze.html">Analyze PGN</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>♟ PawnPrint</h1>
+        <p class="tagline">A toolkit for chess parents, players &amp; organizers. Three tools, each its own app — all running locally with Stockfish 18.</p>
+      </header>
+
+      <section class="hub-grid">
+        <a class="hub-card" href="analyze.html">
+          <div class="hub-icon">📊</div>
+          <h2>Analyze PGN</h2>
+          <p>Upload chess.com / lichess PGNs and get a deep report: openings, phase strengths, tactics, blunders, loss patterns, W/D/L by time control, and a puzzle-based training plan. Save as Markdown and grow it over time.</p>
+          <span class="hub-go">Open analyzer →</span>
+        </a>
+
+        <a class="hub-card" href="live.html">
+          <div class="hub-icon">📡</div>
+          <h2>Live &amp; Engine</h2>
+          <p>Watch a live lichess game move-by-move with instant engine feedback on every move, or set up any position (FEN or click-to-move) and get Stockfish 18's best move, evaluation and principal variation.</p>
+          <span class="hub-go">Open live board →</span>
+        </a>
+
+        <a class="hub-card" href="swiss.html">
+          <div class="hub-icon">🏆</div>
+          <h2>Swiss Pairings</h2>
+          <p>Paste a tournament roster or upload a file, then run a full Swiss tournament: automatic round pairings (color balancing, no rematches, byes), result entry, and live standings with Buchholz &amp; Sonneborn-Berger tiebreaks.</p>
+          <span class="hub-go">Open pairings →</span>
+        </a>
+      </section>
+
+      <footer class="app-footer">
+        PawnPrint · runs entirely in your browser · Stockfish 18 (lite) · your games never leave your machine
+      </footer>
+    </div>
+    <script type="module" src="/src/hub.ts"></script>
+  </body>
+</html>

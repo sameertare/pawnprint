@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Swiss Pairings — PawnPrint</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html">♟ PawnPrint</a>
+      <div class="navlinks">
+        <a href="analyze.html">Analyze PGN</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html" class="active">Swiss Pairings</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>🏆 Swiss Pairings</h1>
+        <p class="tagline">Run a full Swiss tournament: paste or upload a roster, generate pairings each round, enter results, and track standings with tiebreaks.</p>
+      </header>
+
+      <section class="card" id="setup-card">
+        <h2><span class="step">1</span> Roster</h2>
+        <div class="config-row">
+          <label class="stack" style="flex:1; min-width:260px;">Tournament name
+            <input type="text" id="tname" class="text-input" placeholder="Spring Scholastic Open" />
+          </label>
+        </div>
+        <label class="stack">Paste players (one per line — <code>Name</code>, <code>Name Rating</code>, or <code>Name, Rating</code>)
+          <textarea id="roster-text" class="text-area" rows="8" placeholder="1. Magnus Carlsen, 2839
+Hikaru Nakamura 2794
+Fabiano Caruana, 2776
+Alireza Firouzja 2777
+Ding Liren
+Ian Nepomniachtchi 2758"></textarea>
+        </label>
+        <div class="btn-row">
+          <label class="btn" for="roster-file">📂 Upload roster file</label>
+          <input type="file" id="roster-file" accept=".txt,.csv" hidden />
+          <button id="parse-btn" class="btn btn-primary">Create tournament →</button>
+          <button id="sample-roster" class="btn btn-ghost">Load a sample roster</button>
+        </div>
+        <div id="roster-preview" class="roster-preview"></div>
+      </section>
+
+      <section class="card" id="control-card" hidden>
+        <h2><span class="step">2</span> Rounds</h2>
+        <div class="config-row" style="align-items:center;">
+          <button id="pair-btn" class="btn btn-primary">➕ Pair next round</button>
+          <span id="round-info" class="hint"></span>
+          <span style="flex:1"></span>
+          <button id="export-json" class="btn">⬇ Export</button>
+          <label class="btn" for="import-json">📂 Import</label>
+          <input type="file" id="import-json" accept=".json" hidden />
+          <button id="print-btn" class="btn">🖨 Print standings</button>
+          <button id="reset-tourn" class="btn btn-ghost">Reset</button>
+        </div>
+        <div id="rounds"></div>
+      </section>
+
+      <section class="card" id="standings-card" hidden>
+        <h2><span class="step">3</span> Standings</h2>
+        <div id="standings"></div>
+        <p class="hint">Tiebreaks: <b>Buchholz</b> (sum of opponents' scores) then <b>Sonneborn-Berger</b>. Byes score a full point.</p>
+      </section>
+
+      <footer class="app-footer">
+        PawnPrint · Swiss engine runs locally · tournament state auto-saves in your browser
+      </footer>
+    </div>
+    <script type="module" src="/src/swiss.ts"></script>
+  </body>
+</html>
