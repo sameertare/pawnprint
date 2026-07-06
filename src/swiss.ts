@@ -25,6 +25,13 @@ function nameOf(t: Tournament, id: number | null): string {
   if (id == null) return '—';
   return t.players.find((p) => p.id === id)?.name ?? '—';
 }
+/** Name with rating in brackets, e.g. "Ava Thompson (1580)" — "(unrated)" when there's none. */
+function nameWithRatingOf(t: Tournament, id: number | null): string {
+  if (id == null) return '—';
+  const p = t.players.find((p) => p.id === id);
+  if (!p) return '—';
+  return `${p.name} (${p.rating ?? 'unrated'})`;
+}
 
 // ---------- setup ----------
 function currentFormat(): RosterFormat {
@@ -359,13 +366,13 @@ function renderRounds(t: Tournament) {
           if (pr.byeId != null) {
             const pts = pr.byePoints ?? 1;
             const label = pts === 0.5 ? 'REQUESTED BYE (+½)' : 'BYE (+1)';
-            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameOf(t, pr.byeId))}</b></td><td colspan="2" class="mid">${label}</td></tr>`;
+            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td colspan="2" class="mid">${label}</td></tr>`;
           }
           const sel = (val: string, cur: GameResult) => `<option value="${val}"${cur === val ? ' selected' : ''}>`;
           return `<tr>
             <td class="num">${pr.board}</td>
-            <td>♔ ${esc(nameOf(t, pr.whiteId))}</td>
-            <td>♚ ${esc(nameOf(t, pr.blackId))}</td>
+            <td>♔ ${esc(nameWithRatingOf(t, pr.whiteId))}</td>
+            <td>♚ ${esc(nameWithRatingOf(t, pr.blackId))}</td>
             <td colspan="2">
               <select class="result-sel" data-round="${round.number}" data-board="${pr.board}">
                 <option value=""${pr.result == null ? ' selected' : ''}>— result —</option>
