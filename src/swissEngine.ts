@@ -73,7 +73,7 @@ function parseCsvLine(line: string): string[] {
 }
 
 /** Detect a NWChess RosterTable.csv export (grouped header with NWSRS / USCF / FIDE columns). */
-function isNwchessRoster(text: string): boolean {
+export function isNwchessRoster(text: string): boolean {
   const head = text.replace(/\r/g, '').split('\n').slice(0, 3).join(' ');
   return /\bNWSRS\b/i.test(head) && /\bUSCF\b/i.test(head) && /\bFIDE\b/i.test(head);
 }
@@ -81,8 +81,10 @@ function isNwchessRoster(text: string): boolean {
 /**
  * NWChess roster: fixed 16-column layout —
  * 0 section · 1 last · 2 first · 3 grade · 4 school · 5 NWSRS · 6 NWSRS-id ·
- * 7 USCF · 8 USCF-id · 9 USCF-exp · 10 FIDE · 11 FIDE-id · 12 title · 13 exp · 14 byes · 15 fees.
- * FIDE is ignored; the pairing rating is max(NWSRS, USCF). "Withdrew" players are dropped.
+ * 7 USCF · 8 USCF-id · 9 USCF-exp · 10 FIDE · 11 FIDE-id · 12 title · 13 exp · 14 byes · 15 status.
+ * FIDE is ignored; the pairing rating is max(NWSRS, USCF). Column 15 ("Status") carries the
+ * withdrawn/paid marker — NOT column 0, which is the section/division (e.g. "Open", "U1000") and
+ * is never itself a withdrawal indicator.
  */
 function parseNwchessRoster(text: string): RosterEntry[] {
   const out: RosterEntry[] = [];
@@ -94,8 +96,9 @@ function parseNwchessRoster(text: string): RosterEntry[] {
     const section = c[0];
     const last = c[1];
     const first = c[2];
+    const status = c[15] ?? '';
     if (!last || last.toLowerCase() === 'name' || first.toLowerCase() === 'first') continue; // header rows
-    if (section.toLowerCase() === 'withdrew') continue; // not playing
+    if (/withdr|^wd$|inactive|dropped/i.test(status) || /withdr/i.test(section)) continue; // not playing
     const nwsrs = ratingOrNull(c[5]);
     const uscf = ratingOrNull(c[7]);
     // FIDE (c[10]) intentionally ignored.

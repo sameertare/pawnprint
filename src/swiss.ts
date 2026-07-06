@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  commitRound, createTournament, pairNextRound, parseRoster,
+  commitRound, createTournament, isNwchessRoster, pairNextRound, parseRoster,
   recommendedRounds, setResult, standings,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
@@ -41,17 +41,32 @@ const FORMAT_LABEL: Record<string, string> = { plain: 'Plain list', table: 'US C
 /**
  * If parsing with the currently-selected format leaves numbers stuck in player names (a strong
  * sign the wrong format is selected — e.g. a tab/space table parsed as a plain list), check
- * whether one of the other two formats parses the same text into fully clean names with at least
- * as many players, and suggest switching to it. Returns null if the current format looks fine.
+ * whether one of the other two formats parses the same text into fully clean names, and suggest
+ * switching to it. Returns null if the current format looks fine.
+ *
+ * Deliberately does NOT require the alternate format to produce at least as many players as the
+ * current (wrong) one: the correct format can legitimately parse *fewer* rows into players than a
+ * wrong one, since e.g. NWChess rosters correctly drop header rows and withdrawn players, both of
+ * which a plain-list parser would otherwise miscount as extra bogus "players". Only a floor
+ * against a near-empty/degenerate match is kept.
  */
 function suggestBetterFormat(text: string, current: RosterFormat, currentRoster: RosterEntry[]) {
   const dirty = currentRoster.filter((p) => /\d/.test(p.name)).length;
   if (dirty === 0) return null;
+  // The CSV's own column structure unambiguously identifies an NWChess export — prefer it over a
+  // generic table match even if "table" happens to sweep up more (mis-parsed) rows, since only the
+  // NWChess-specific parser knows to drop header rows and withdrawn players correctly.
+  if (current !== 'nwchess' && isNwchessRoster(text)) {
+    const roster = parseRoster(text, 'nwchess');
+    if (roster.length >= Math.max(3, currentRoster.length * 0.4) && !roster.some((p) => /\d/.test(p.name))) {
+      return { format: 'nwchess' as RosterFormat, roster };
+    }
+  }
   const others: RosterFormat[] = (['plain', 'table', 'nwchess'] as RosterFormat[]).filter((f) => f !== current);
   let best: { format: RosterFormat; roster: RosterEntry[] } | null = null;
   for (const f of others) {
     const roster = parseRoster(text, f);
-    if (roster.length < currentRoster.length) continue;
+    if (roster.length < Math.max(3, currentRoster.length * 0.4)) continue;
     if (roster.some((p) => /\d/.test(p.name))) continue;
     if (!best || roster.length > best.roster.length) best = { format: f, roster };
   }
@@ -91,7 +106,7 @@ const SAMPLES: Record<string, { text: string; tname: string }> = {
 "Open","Chen","Cara","5","Sample ES","1520","SMP003C","1495","30000003","01/2027","0","0","","","","Paid"
 "U1000","Lee","Dan","4","Sample ES","1000","SMP004D","950","30000004","01/2027","0","0","","","","Paid"
 "U1000","Kim","Eve","3","Sample ES","900","SMP005E","0","","","0","0","","","","Paid"
-"Withdrew","Park","Zoe","6","Sample ES","1100","SMP006Z","1080","30000006","01/2027","0","0","","","","----"`,
+"U1000","Park","Zoe","6","Sample ES","1100","SMP006Z","1080","30000006","01/2027","0","0","","","","Withdrew"`,
   },
 };
 
@@ -110,7 +125,16 @@ $('#sample-roster').addEventListener('click', () => {
 $('#roster-file').addEventListener('change', async () => {
   const f = ($('#roster-file') as HTMLInputElement).files?.[0];
   if (!f) return;
-  ($('#roster-text') as HTMLTextAreaElement).value = await f.text();
+  const text = await f.text();
+  ($('#roster-text') as HTMLTextAreaElement).value = text;
+  // An uploaded NWChess RosterTable.csv is recognizable by its column structure regardless of
+  // whatever format was previously selected — switch to it automatically so header rows and
+  // withdrawn players are handled correctly from the start, instead of relying on the user to
+  // notice a "wrong format" warning after the fact.
+  if (isNwchessRoster(text) && currentFormat() !== 'nwchess') {
+    ($('#format-select') as HTMLSelectElement).value = 'nwchess';
+    applyFormatHint();
+  }
   previewRoster();
 });
 
