@@ -320,5 +320,6 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
     timePressureBlunders,
     worstMoves: worstMoves.slice(0, 3),
     evalGraph: analyzed ? evals.map((v) => Math.max(-1000, Math.min(1000, v ?? 0))) : null,
+    sans,
   };
 }

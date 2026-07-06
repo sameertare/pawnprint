@@ -29,9 +29,10 @@ The player the report is for is **auto-detected**, not picked from a dropdown: w
 - **Tactics** — missed wins, missed forced mates, missed tactical shots (engine's best was an unplayed capture/check), and your biggest single-move swings.
 - **Errors in wins vs losses** — do blunders cluster in the games you lose?
 - **Patterns** — thrown wins (winning position → loss), conversion rate of winning positions, resilience (saves from losing), time-trouble errors, and a plain-English narrative of the dominant loss pattern.
+- **Time trouble** — its own small section: how many games had `[%clk]` data, how many blunders/mistakes were played with under 30 seconds left, and what share of your total errors that represents — clock management is something you can actually train, so it gets called out on its own rather than buried in a footnote.
 - **Results by time control** — Bullet / Blitz / Rapid / Classical / Daily W-D-L and accuracy.
 - **Training plan** — prioritized recommendations, each linking to the exact **lichess puzzle themes** to drill, plus concrete practice tips.
-- **Games list with eval graphs** — every analyzed game, most recent first, with date, opponent, result, opening, accuracy, and a sparkline of the evaluation (white's perspective) across the whole game. A ▶ link opens a lichess-sourced game directly in **Live & Engine**, deep-linked to step through it move by move (chess.com games don't have a public live-game API, so the link only appears for lichess games).
+- **Games list with eval graphs** — every analyzed game, most recent first, with date, opponent, result, opening, accuracy, and a sparkline of the evaluation (white's perspective) across the whole game. A ▶ link opens a lichess-sourced game directly in **Live & Engine**, deep-linked to step through it move by move (chess.com games don't have a public live-game API, so the link only appears for lichess games). A ⬇ link downloads that game as a standard, annotated PGN — engine evals baked in as `[%eval ...]` comments plus a short note on any flagged inaccuracy/mistake/blunder — viewable in any ordinary PGN reader offline, no app required.
 
 ## Save & track over time
 
@@ -114,6 +115,7 @@ src/
   board.ts          presentation-only chessboard (FEN render, arrows, click-to-move)
   live.ts           Live & Engine UI (position analysis + live-game feedback)
   sparkline.ts      eval-graph rendering, shared by Analyze (static) & Live (interactive/click-to-seek)
+  pgnExport.ts      annotated-PGN builder ([%eval] + best-move comments), shared by Analyze & Live
   pwa.ts            service worker registration, shared by every page's entry module
   swissEngine.ts    pure Swiss logic: roster parsing, pairing, results, standings
   swiss.ts          Swiss Pairings UI
@@ -162,6 +164,8 @@ Two modes, one board (Stockfish 18 runs locally in the browser):
 
 **Eval graph** — once a loaded game has at least two evaluated positions, a sparkline appears under the eval bar tracing the evaluation (white's perspective) across the whole game so far; click anywhere on it to jump straight to that ply. It fills in progressively as background evaluation catches up, and works in both modes. Opening a game from Analyze's games list (see below) via its ▶ link deep-links here and drops you straight onto this view.
 
+**Export PGN** — the **⬇ PGN** button downloads the currently loaded line as a standard PGN, with the engine eval baked in as a `[%eval ...]` comment on every position that's been evaluated so far, plus a note wherever the engine's suggested best move differs from what was actually played — handy for a coach who wants to review offline without the app.
+
 How the live board works: the browser streams `GET https://lichess.org/api/stream/game/{id}` (games) or `GET https://lichess.org/study/{id}[/{chapterId}].pgn` (studies) directly from the lichess public API (CORS-allowed) — no backend required, which is what lets the Live tool work on a static host like GitHub Pages. The bundled Node backend also exposes an equivalent `/api/live/:id` Server-Sent-Events relay for environments that prefer to proxy, but the frontend doesn't need it.
 
 ---
@@ -178,6 +182,7 @@ Run a complete Swiss-system tournament in the browser.
 - **Bye requests:** if the roster's bye column names round(s) a player is sitting out (e.g. `3` or `4,5`), that player is automatically given a **half-point bye** in that round instead of being paired, and the rest of the field pairs normally around them.
 - **Pairing engine:** Dutch-style fold pairing — round 1 pairs the top half vs the bottom half by rating; later rounds pair within score groups, down-float odd players, avoid rematches (with a global rematch-free fallback), balance colors, and assign a full-point bye to the lowest player who hasn't had one when the field (after bye requests) is odd.
 - **Results & standings:** enter 1-0 / ½-½ / 0-1 per board; standings update live with **Buchholz** and **Sonneborn-Berger** tiebreaks, W/D/L (a requested half-point bye counts as a draw, a forced full-point bye counts as a win), and color balance.
+- **Wall chart:** a crosstable — one row per player (current standings order), one column per round — showing exactly who they played, with what color, and the result (e.g. `8w+` = played standings-#8 as White and won; `4b=` = played #4 as Black and drew; a pending pairing shows the opponent with no result yet). The single most useful view for a TD or parent scanning for repeat opponents or checking a player's path through the event at a glance.
 - **Persistence:** the whole event auto-saves in your browser (localStorage). **Export/Import** it as JSON, and **Print all standings** for posting.
 - **Navigation:** every tool page has a **🏠 Home** link in the top nav back to the PawnPrint hub — your tournament stays saved when you navigate away and back.
 

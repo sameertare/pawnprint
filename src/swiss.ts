@@ -339,6 +339,7 @@ function renderAll() {
 
   renderRounds(t);
   renderStandings(t);
+  renderWallChart(t);
 }
 
 function renderSectionTabs() {
@@ -400,6 +401,7 @@ function renderRounds(t: Tournament) {
       setResult(t2, parseInt(s.dataset.round!, 10), parseInt(s.dataset.board!, 10), (s.value || null) as GameResult);
       save();
       renderStandings(t2);
+      renderWallChart(t2);
       renderSectionTabs();
       renderRounds(t2);
       renderPrintArea();
@@ -430,6 +432,54 @@ function renderStandings(t: Tournament) {
   if (!t.rounds.length) { ($('#standings-card') as HTMLElement).hidden = true; return; }
   ($('#standings-card') as HTMLElement).hidden = false;
   $('#standings').innerHTML = standingsTableHtml(t);
+}
+
+/**
+ * A crosstable: one row per player (in current standings order), one column per round, each cell
+ * showing who they played and the outcome — the single most-requested view at an in-person
+ * tournament for spotting repeat opponents or checking a specific player's path at a glance.
+ */
+function wallChartHtml(t: Tournament): string {
+  const rows = standings(t);
+  const rankById = new Map(rows.map((r) => [r.player.id, r.rank]));
+  const header = t.rounds.map((r) => `<th class="num">R${r.number}</th>`).join('');
+  const body = rows
+    .map((r) => {
+      const cells = t.rounds
+        .map((round) => {
+          const pr = round.pairings.find(
+            (p) => p.whiteId === r.player.id || p.blackId === r.player.id || p.byeId === r.player.id
+          );
+          if (!pr) return `<td class="num hint">—</td>`;
+          if (pr.byeId != null) {
+            const pts = pr.byePoints ?? 1;
+            return `<td class="num mid">bye ${pts === 0.5 ? '½' : '1'}</td>`;
+          }
+          const isWhite = pr.whiteId === r.player.id;
+          const oppId = isWhite ? pr.blackId! : pr.whiteId!;
+          const oppRank = rankById.get(oppId) ?? '?';
+          const color = isWhite ? 'w' : 'b';
+          let sym = '';
+          let cls = 'hint';
+          if (pr.result === '1-0') { sym = isWhite ? '+' : '−'; cls = isWhite ? 'pos' : 'neg'; }
+          else if (pr.result === '0-1') { sym = isWhite ? '−' : '+'; cls = isWhite ? 'neg' : 'pos'; }
+          else if (pr.result === '1/2-1/2') { sym = '='; cls = 'mid'; }
+          return `<td class="num ${cls}">${oppRank}${color}${sym}</td>`;
+        })
+        .join('');
+      return `<tr><td class="num">${r.rank}</td><td>${esc(r.player.name)}</td>${cells}</tr>`;
+    })
+    .join('');
+  return `<div class="games-table-wrap wallchart-wrap"><table class="wallchart-table"><thead><tr>
+      <th class="num">#</th><th>Player</th>${header}
+    </tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function renderWallChart(t: Tournament) {
+  const card = $('#wallchart-card') as HTMLElement;
+  if (!t.rounds.length) { card.hidden = true; return; }
+  card.hidden = false;
+  $('#wallchart').innerHTML = wallChartHtml(t);
 }
 
 /** Print view: standings for every section (a wall chart for posting). */

@@ -10,6 +10,7 @@ import type { GameRecord, ReportData, ReportMeta } from './types';
 import { renderSparklineSvg } from './sparkline';
 import { registerServiceWorker } from './pwa';
 import { groupPlayerNames, nameKey } from './playerMatch';
+import { buildAnnotatedPgn, downloadPgn } from './pgnExport';
 
 registerServiceWorker();
 
@@ -311,6 +312,9 @@ function renderGamesSection(games: GameRecord[]): string {
       const liveLink = /^https?:\/\/(www\.)?lichess\.org\//.test(g.site)
         ? `<a href="live.html?game=${encodeURIComponent(g.site)}" target="_blank" rel="noopener" title="Open in Live &amp; Engine">▶</a>`
         : '';
+      const pgnBtn = g.sans?.length
+        ? `<button class="btn-icon pgn-dl-btn" data-id="${esc(g.id)}" title="Download annotated PGN (engine evals + notes on flagged moves)">⬇</button>`
+        : '';
       return `<tr>
         <td>${esc(g.date)}</td>
         <td>${colorGlyph} ${esc(opponent)}</td>
@@ -318,7 +322,7 @@ function renderGamesSection(games: GameRecord[]): string {
         <td>${esc(g.family)}</td>
         <td class="num">${g.accuracy.overall != null ? g.accuracy.overall + '%' : '—'}</td>
         <td class="spark-cell">${spark}</td>
-        <td class="num">${liveLink}</td>
+        <td class="num">${liveLink} ${pgnBtn}</td>
       </tr>`;
     })
     .join('');
@@ -326,7 +330,7 @@ function renderGamesSection(games: GameRecord[]): string {
     <div class="games-table-wrap"><table><thead><tr>
       <th>Date</th><th>Opponent</th><th>Result</th><th>Opening</th><th class="num">Accuracy</th><th>Eval graph</th><th></th>
     </tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="hint">The eval graph tracks the position's evaluation (white's perspective) across the whole game. Click ▶ to open a game in Live &amp; Engine and step through it move by move.</p>
+    <p class="hint">The eval graph tracks the position's evaluation (white's perspective) across the whole game. Click ▶ to open a game in Live &amp; Engine and step through it move by move. Click ⬇ to download that game as a standard PGN with engine evals and flagged-move notes baked in as comments.</p>
   </div>`;
 }
 
@@ -407,6 +411,22 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
     </tbody></table>
   </div>`);
 
+  const mistakesTotal = a.phases.reduce((s, ph) => s + ph.mistakes, 0);
+  const errorDenom = a.tactics.blundersTotal + mistakesTotal;
+  const timePct = errorDenom > 0 ? Math.round((p.timePressureBlunders / errorDenom) * 100) : null;
+  html.push(`<div class="card"><h2>⏱ Time trouble</h2>
+    ${
+      p.clockGames > 0
+        ? `<div class="summary-cards">
+      <div class="stat-card"><span class="big">${p.clockGames}</span><span class="label">Games with clock data</span></div>
+      <div class="stat-card"><span class="big neg">${p.timePressureBlunders}</span><span class="label">Errors under 30s left</span></div>
+      <div class="stat-card"><span class="big">${timePct !== null ? timePct + '%' : '—'}</span><span class="label">Of all your errors</span></div>
+    </div>
+    <p class="section-note">${p.timePressureBlunders} blunder(s)/mistake(s) were played with under 30 seconds on the clock, across ${p.clockGames} game(s) with clock data${timePct !== null ? ` — ${timePct}% of all your inaccuracy-or-worse moves happened in time trouble` : ''}. ${p.timePressureBlunders >= 2 ? 'Worth training: banking more time earlier in the game, or practicing at a longer time control.' : 'Not a major factor yet in this sample.'}</p>`
+        : `<p class="section-note">No clock data found in these games — they don't include <code>[%clk]</code> tags (common for correspondence/daily games or manually-typed PGNs).</p>`
+    }
+  </div>`);
+
   html.push(`<div class="card"><h2>🔍 Patterns detected</h2>
     ${
       p.narrative.length
@@ -451,6 +471,17 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
 function mdBold(s: string): string {
   return s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 }
+
+// Delegated once on the (stable) results container, since its innerHTML is fully replaced on
+// every re-render — a listener on the buttons themselves would be destroyed each time.
+resultsEl.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('.pgn-dl-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  const rec = records.find((g) => g.id === btn.dataset.id);
+  if (!rec) return;
+  const safeName = `${rec.white}_vs_${rec.black}`.replace(/[^\w.-]/g, '_').slice(0, 60);
+  downloadPgn(`${rec.date}_${safeName}.pgn`, buildAnnotatedPgn(rec));
+});
 
 // ---------- export / persistence ----------
 $('#download-md').addEventListener('click', () => {

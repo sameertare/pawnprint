@@ -8,6 +8,7 @@ import { identifyOpening } from './openings';
 import { splitPgn } from './pgn';
 import { mountInteractiveSparkline } from './sparkline';
 import { registerServiceWorker } from './pwa';
+import { buildPgnFromLine, downloadPgn } from './pgnExport';
 
 registerServiceWorker();
 
@@ -99,6 +100,11 @@ let view = 0;
 let mode: 'position' | 'live' = 'position';
 let liveFollow = true;
 let pumping = false;
+// Tracked purely for the "Export PGN" button's header block — best-effort, not authoritative.
+let curWhite: string | undefined;
+let curBlack: string | undefined;
+let curEvent: string | undefined;
+let curResult: string | undefined;
 
 function curDepth(): number {
   const sel = mode === 'live' ? '#depth-live' : '#depth-position';
@@ -109,6 +115,7 @@ function resetLine(fen: string) {
   line = [{ fen, lm: null, san: null }];
   evalsW = [null]; bestU = [null]; mateN = [null];
   view = 0;
+  curWhite = curBlack = curEvent = curResult = undefined;
 }
 function appendNode(fen: string, lm: string | null) {
   const prev = line[line.length - 1].fen;
@@ -119,7 +126,7 @@ function truncateAfter(i: number) {
   line.length = i + 1; evalsW.length = i + 1; bestU.length = i + 1; mateN.length = i + 1;
 }
 
-interface BuiltLine { line: Node[]; white?: string; black?: string; wr?: string; br?: string; event?: string; }
+interface BuiltLine { line: Node[]; white?: string; black?: string; wr?: string; br?: string; event?: string; result?: string; }
 
 /** Build a full line from a PGN string. Returns null if it can't be parsed. */
 function buildLineFromPgn(pgn: string): BuiltLine | null {
@@ -130,7 +137,7 @@ function buildLineFromPgn(pgn: string): BuiltLine | null {
   // chess.js defaults missing Seven Tag Roster headers to the literal string "?" — treat that
   // the same as absent (studies in particular have no White/Black headers at all).
   const s = (v: string | null | undefined) => (v && v !== '?' ? v : undefined);
-  const meta = { wr: s(h.WhiteElo), br: s(h.BlackElo), event: s(h.Event) };
+  const meta = { wr: s(h.WhiteElo), br: s(h.BlackElo), event: s(h.Event), result: h.Result || undefined };
   if (!verbose.length) {
     // PGN with only a FEN header and no moves — navigate the single position.
     return { line: [{ fen: c.fen(), lm: null, san: null }], white: s(h.White), black: s(h.Black), ...meta };
@@ -423,6 +430,7 @@ $('#load-pgn').addEventListener('click', () => {
   line = built.line;
   evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
   view = 0;
+  curWhite = built.white; curBlack = built.black; curEvent = built.event; curResult = built.result;
   const label = built.white ? `${built.white}${built.wr ? ` (${built.wr})` : ''} vs ${built.black}${built.br ? ` (${built.br})` : ''} — ` : '';
   $('#engine-out').innerHTML = `<p class="hint">${label}${line.length - 1} moves loaded. Use ◀ ▶ / arrow keys to step through; feedback fills in as the engine analyses.</p>`;
   render();
@@ -519,6 +527,7 @@ function classifyLichessInput(raw: string): LichessInput | null {
 }
 
 function setPlayers(white?: string, black?: string, wr?: string, br?: string, fallbackLabel?: string) {
+  curWhite = white; curBlack = black;
   if (!white && !black) {
     if (fallbackLabel) $('#live-players').innerHTML = `<b>${fallbackLabel}</b>`;
     return;
@@ -608,6 +617,7 @@ async function connectLive(id: string) {
         pgnLoaded = true;
         view = line.length - 1;
         setPlayers(built.white, built.black, built.wr, built.br);
+        curEvent = built.event; curResult = built.result;
         status.innerHTML = `Loaded ${line.length - 1} moves. Following live — step back any time with ◀ ▶.`;
       }
     }
@@ -650,6 +660,7 @@ async function connectStudy(studyId: string, chapterId?: string) {
     evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
     view = 0;
     setPlayers(built.white, built.black, built.wr, built.br, built.event);
+    curEvent = built.event; curResult = built.result;
     const more = chunks.length > 1 ? ` (chapter 1 of ${chunks.length} — paste a direct chapter link for another)` : '';
     status.innerHTML = `Loaded study chapter${more}. Use ◀ ▶ to step through.`;
     render();
@@ -710,6 +721,14 @@ $('#nav-back').addEventListener('click', () => goto(view - 1));
 $('#nav-fwd').addEventListener('click', () => goto(view + 1));
 $('#nav-last').addEventListener('click', () => goto(line.length - 1));
 $('#flip-btn').addEventListener('click', () => board.flip());
+$('#export-pgn-btn').addEventListener('click', () => {
+  const pgn = buildPgnFromLine({
+    white: curWhite, black: curBlack, event: curEvent, result: curResult,
+    line, evalsW, bestU,
+  });
+  const safeName = `${curWhite || 'white'}_vs_${curBlack || 'black'}`.replace(/[^\w.-]/g, '_').slice(0, 60);
+  downloadPgn(`${safeName}.pgn`, pgn);
+});
 
 document.addEventListener('keydown', (e) => {
   const t = e.target as HTMLElement;
