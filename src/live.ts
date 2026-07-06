@@ -6,6 +6,10 @@ import type { EngineEval } from './engine';
 import { winPct } from './analyze';
 import { identifyOpening } from './openings';
 import { splitPgn } from './pgn';
+import { mountInteractiveSparkline } from './sparkline';
+import { registerServiceWorker } from './pwa';
+
+registerServiceWorker();
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -190,7 +194,15 @@ function render() {
   renderAssess(c, fen);
   renderMoveList();
   updateNav();
+  renderEvalGraph();
   void updateCandidates();
+}
+
+function renderEvalGraph() {
+  const el = $('#eval-graph');
+  if (line.length < 2) { el.hidden = true; return; }
+  el.hidden = false;
+  mountInteractiveSparkline(el, evalsW, view, (i) => goto(i));
 }
 
 function renderAssess(c: Chess, fen: string) {
@@ -311,6 +323,7 @@ async function pump() {
         renderAssess(new Chess(line[view].fen), line[view].fen);
       }
       renderMoveList();
+      renderEvalGraph(); // the sparkline reflects the whole line, so any new eval refreshes it
     }
   } finally {
     pumping = false;
@@ -723,3 +736,11 @@ document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
 resetLine(START);
 render();
 setEvalBar(20);
+
+// Deep link from another tool, e.g. Analyze's "open in Live & Engine": ?game=<lichess URL/ID>
+const deepLinkGame = new URLSearchParams(location.search).get('game');
+if (deepLinkGame) {
+  document.querySelector<HTMLElement>('.tab[data-mode="live"]')?.click();
+  ($('#game-input') as HTMLInputElement).value = deepLinkGame;
+  ($('#connect-btn') as HTMLElement).click();
+}

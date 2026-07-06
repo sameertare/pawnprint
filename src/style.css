@@ -246,6 +246,8 @@ a { color: var(--blue); }
 .feed-label { font-weight: 600; }
 
 /* navigation row */
+.eval-graph { margin-top: 6px; height: 32px; }
+.eval-graph .sparkline { width: 100%; height: 32px; }
 .nav-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .nav-btn { padding: 6px 12px; font-size: 1rem; line-height: 1; }
 .nav-spacer { flex: 1; }
@@ -311,6 +313,17 @@ a { color: var(--blue); }
 .sec-tab.active { background: var(--accent); color: #10140c; border-color: var(--accent-dark); font-weight: 600; }
 .sec-tab.active .hint { color: #204010; }
 #print-area { display: none; }
+/* ---------- sparklines (Analyze games list + Live board) ---------- */
+.sparkline { display: block; width: 100%; height: 100%; }
+.spark-zero { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.spark-line { stroke: var(--accent); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.games-table-wrap { margin-top: 8px; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+.games-table-wrap table { width: 100%; border-collapse: collapse; margin: 0; }
+.games-table-wrap th, .games-table-wrap td { padding: 6px 12px; white-space: nowrap; }
+.spark-cell { width: 150px; height: 32px; padding: 2px 8px !important; }
+.spark-cell svg { width: 140px; height: 28px; }
+.games-table-wrap a { text-decoration: none; font-size: 1.1rem; }
+
 .roster-preview { margin-top: 12px; }
 .chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .roster-table-wrap {

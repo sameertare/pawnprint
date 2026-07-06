@@ -4,6 +4,9 @@ import {
   recommendedRounds, setResult, standings,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
+import { registerServiceWorker } from './pwa';
+
+registerServiceWorker();
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
 const STORE_KEY = 'pawnprint-swiss';

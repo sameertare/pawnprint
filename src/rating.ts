@@ -1,5 +1,8 @@
 import './style.css';
 import { estimateRating } from './ratingEngine';
+import { registerServiceWorker } from './pwa';
+
+registerServiceWorker();
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
 const NUM_OPPONENTS = 15;

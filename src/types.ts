@@ -62,6 +62,7 @@ export interface GameRecord {
   clockDataAvailable: boolean;
   timePressureBlunders: number; // blunders/mistakes played with < 30s on the clock
   worstMoves: WorstMove[];
+  evalGraph: number[] | null; // white-perspective cp per ply (start position + after each move), clamped for charting; null if not analyzed
 }
 
 export interface ReportMeta {

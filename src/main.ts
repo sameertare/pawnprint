@@ -7,6 +7,10 @@ import { aggregate, scorePct, themeUrl } from './aggregate';
 import type { Aggregates, OpeningRow, WDL } from './aggregate';
 import { mergeGames, parseMarkdownReport, renderMarkdown } from './markdown';
 import type { GameRecord, ReportData, ReportMeta } from './types';
+import { renderSparklineSvg } from './sparkline';
+import { registerServiceWorker } from './pwa';
+
+registerServiceWorker();
 
 // ---------- state ----------
 let parsedGames: ParsedGame[] = [];
@@ -261,6 +265,42 @@ function openingTableHtml(rows: OpeningRow[], emptyMsg: string): string {
     .join('')}</tbody></table>`;
 }
 
+function renderGamesSection(games: GameRecord[]): string {
+  if (!games.length) return '';
+  const rows = [...games]
+    .sort((x, y) => y.date.localeCompare(x.date))
+    .map((g) => {
+      const resultCls = g.result === 'win' ? 'pos' : g.result === 'loss' ? 'neg' : 'mid';
+      const resultLabel = g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : 'Draw';
+      const opponent = g.userColor === 'w' ? g.black : g.white;
+      const colorGlyph = g.userColor === 'w' ? '♔' : '♚';
+      const evalGraph = g.evalGraph ?? null;
+      const spark = evalGraph && evalGraph.length > 1
+        ? renderSparklineSvg(evalGraph, { width: 140, height: 28 })
+        : `<span class="hint">no engine data</span>`;
+      // Live & Engine can only load lichess games (chess.com has no public unauthenticated live-game API).
+      const liveLink = /^https?:\/\/(www\.)?lichess\.org\//.test(g.site)
+        ? `<a href="live.html?game=${encodeURIComponent(g.site)}" target="_blank" rel="noopener" title="Open in Live &amp; Engine">▶</a>`
+        : '';
+      return `<tr>
+        <td>${esc(g.date)}</td>
+        <td>${colorGlyph} ${esc(opponent)}</td>
+        <td><span class="${resultCls}">${resultLabel}</span></td>
+        <td>${esc(g.family)}</td>
+        <td class="num">${g.accuracy.overall != null ? g.accuracy.overall + '%' : '—'}</td>
+        <td class="spark-cell">${spark}</td>
+        <td class="num">${liveLink}</td>
+      </tr>`;
+    })
+    .join('');
+  return `<div class="card"><h2>📈 Games</h2>
+    <div class="games-table-wrap"><table><thead><tr>
+      <th>Date</th><th>Opponent</th><th>Result</th><th>Opening</th><th class="num">Accuracy</th><th>Eval graph</th><th></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="hint">The eval graph tracks the position's evaluation (white's perspective) across the whole game. Click ▶ to open a game in Live &amp; Engine and step through it move by move.</p>
+  </div>`;
+}
+
 function renderResults(a: Aggregates, username: string, newCount: number, oldCount: number) {
   const p = a.patterns;
   const html: string[] = [];
@@ -280,6 +320,8 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
       ${wdlRow('As Black', a.byColor.black)}
     </tbody></table>
   </div>`);
+
+  html.push(renderGamesSection(records));
 
   html.push(`<div class="card"><h2>♟ Opening performance</h2>
     <h3>Strongest openings</h3>${openingTableHtml(a.strongest, 'Need at least 2 games in an opening (with ≥50% score) to rank it.')}

@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Live &amp; Engine — PawnPrint</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#14181f" />
   </head>
   <body>
     <nav class="topnav">
@@ -36,6 +39,7 @@
             <div id="evalbar" class="evalbar"><div id="evalfill" class="evalfill"></div></div>
             <span id="evalnum" class="evalnum">0.0</span>
           </div>
+          <div id="eval-graph" class="eval-graph" hidden></div>
           <div class="nav-row" id="nav-row" hidden>
             <button id="nav-first" class="btn nav-btn" title="First move (Home)">⏮</button>
             <button id="nav-back" class="btn nav-btn" title="Previous move (←)">◀</button>

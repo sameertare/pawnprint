@@ -29,6 +29,7 @@ Turns PGN files from **chess.com** or **lichess** into a deep, parent-friendly p
 - **Patterns** — thrown wins (winning position → loss), conversion rate of winning positions, resilience (saves from losing), time-trouble errors, and a plain-English narrative of the dominant loss pattern.
 - **Results by time control** — Bullet / Blitz / Rapid / Classical / Daily W-D-L and accuracy.
 - **Training plan** — prioritized recommendations, each linking to the exact **lichess puzzle themes** to drill, plus concrete practice tips.
+- **Games list with eval graphs** — every analyzed game, most recent first, with date, opponent, result, opening, accuracy, and a sparkline of the evaluation (white's perspective) across the whole game. A ▶ link opens a lichess-sourced game directly in **Live & Engine**, deep-linked to step through it move by move (chess.com games don't have a public live-game API, so the link only appears for lichess games).
 
 ## Save & track over time
 
@@ -109,6 +110,8 @@ src/
   main.ts           Analyze-PGN UI
   board.ts          presentation-only chessboard (FEN render, arrows, click-to-move)
   live.ts           Live & Engine UI (position analysis + live-game feedback)
+  sparkline.ts      eval-graph rendering, shared by Analyze (static) & Live (interactive/click-to-seek)
+  pwa.ts            service worker registration, shared by every page's entry module
   swissEngine.ts    pure Swiss logic: roster parsing, pairing, results, standings
   swiss.ts          Swiss Pairings UI
   ratingEngine.ts   pure USCF rating-estimate logic
@@ -118,6 +121,7 @@ src/
 server/
   server.mjs      Express: static hosting, /api/reports save/load, /api/live/:id SSE relay
 public/engine/    Stockfish 18 (lite) worker + wasm
+public/manifest.webmanifest, sw.js, icon.svg, icon-192.png, icon-512.png, apple-touch-icon.png   PWA manifest, service worker, and app icons
 samples/          example PGNs (bundled "try the sample" button)
 ```
 
@@ -125,6 +129,14 @@ samples/          example PGNs (bundled "try the sample" button)
 
 - Analysis of the user's moves only — the identified player is auto-detected from the PGN and selectable.
 - All processing is local; no game data leaves your machine.
+
+## Install as an app / offline use
+
+PawnPrint is an installable PWA (Progressive Web App):
+
+- **Install** — most browsers show an install prompt (address-bar icon, or browser menu → "Install PawnPrint" / "Add to Home Screen"). Installed, it opens in its own window with no browser chrome, like a native app.
+- **Offline** — a service worker caches the app shell (HTML/CSS/JS) and the Stockfish engine files after your first visit, using a stale-while-revalidate strategy: cached assets load instantly while a fresh copy is fetched in the background for next time. Once the engine has loaded once, position analysis and PGN review keep working with no connectivity at all — handy in a tournament hall with bad wifi. Live game streaming and lichess study/search lookups still need a connection, since those are fetched from lichess's API rather than cached.
+- Assets update automatically in the background; reload the app to pick up a new version.
 
 ---
 
@@ -145,6 +157,8 @@ Two modes, one board (Stockfish 18 runs locally in the browser):
 - Every move gets **feedback** — Best / OK / Inaccuracy ?! / Mistake ? / Blunder ?? — based on the win-probability swing, with the engine's better move shown when relevant. The **● LIVE** badge (and jump-back-to-live button) only appears for an actual live game, not a study/position load.
 
 **Top candidate moves (both modes)** — the currently viewed position always shows the top 3 engine moves (Stockfish's MultiPV), each with its evaluation and a short continuation, drawn on the board as three ranked arrows (green/gold/blue, thickest and brightest for the best move) — useful for seeing what else was worth considering, not just the single best line.
+
+**Eval graph** — once a loaded game has at least two evaluated positions, a sparkline appears under the eval bar tracing the evaluation (white's perspective) across the whole game so far; click anywhere on it to jump straight to that ply. It fills in progressively as background evaluation catches up, and works in both modes. Opening a game from Analyze's games list (see below) via its ▶ link deep-links here and drops you straight onto this view.
 
 How the live board works: the browser streams `GET https://lichess.org/api/stream/game/{id}` (games) or `GET https://lichess.org/study/{id}[/{chapterId}].pgn` (studies) directly from the lichess public API (CORS-allowed) — no backend required, which is what lets the Live tool work on a static host like GitHub Pages. The bundled Node backend also exposes an equivalent `/api/live/:id` Server-Sent-Events relay for environments that prefer to proxy, but the frontend doesn't need it.
 
