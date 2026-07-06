@@ -91,9 +91,11 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
       : inferOwnerColorFromTitle(h['ChapterName'] || h['Event']) !== 'b';
   const userColor: Color = userIsWhite ? 'w' : 'b';
   const resultRaw = h['Result'] ?? '*';
-  let result: Result = 'draw';
+  let result: Result;
   if (resultRaw === '1-0') result = userIsWhite ? 'win' : 'loss';
   else if (resultRaw === '0-1') result = userIsWhite ? 'loss' : 'win';
+  else if (resultRaw === '1/2-1/2') result = 'draw';
+  else result = 'unknown'; // "*" or missing — game wasn't played to a decided result
 
   const sans = game.moves.map((m) => m.san);
   const { eco, opening, family } = identifyOpening(h, sans);

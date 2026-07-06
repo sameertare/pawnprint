@@ -1,4 +1,6 @@
-export type Result = 'win' | 'loss' | 'draw';
+// 'unknown' is an unfinished/undecided game (PGN Result "*" or missing) — not a draw, and
+// excluded from win/loss/draw tallies since there's no decided outcome to count.
+export type Result = 'win' | 'loss' | 'draw' | 'unknown';
 export type Phase = 'opening' | 'middlegame' | 'endgame';
 export type Color = 'w' | 'b';
 

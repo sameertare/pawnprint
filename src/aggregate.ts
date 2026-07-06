@@ -83,6 +83,7 @@ function emptyWDL(): WDL {
 }
 
 function addResult(w: WDL, r: GameRecord) {
+  if (r.result === 'unknown') return; // no decided outcome — don't count it as a win/draw/loss
   w.games++;
   if (r.result === 'win') w.wins++;
   else if (r.result === 'loss') w.losses++;

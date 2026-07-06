@@ -298,8 +298,9 @@ function renderGamesSection(games: GameRecord[]): string {
   const rows = [...games]
     .sort((x, y) => y.date.localeCompare(x.date))
     .map((g) => {
-      const resultCls = g.result === 'win' ? 'pos' : g.result === 'loss' ? 'neg' : 'mid';
-      const resultLabel = g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : 'Draw';
+      const resultCls = g.result === 'win' ? 'pos' : g.result === 'loss' ? 'neg' : g.result === 'draw' ? 'mid' : '';
+      const resultLabel =
+        g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : g.result === 'draw' ? 'Draw' : 'Unfinished';
       const opponent = g.userColor === 'w' ? g.black : g.white;
       const colorGlyph = g.userColor === 'w' ? '♔' : '♚';
       const evalGraph = g.evalGraph ?? null;
@@ -333,9 +334,10 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
   const p = a.patterns;
   const html: string[] = [];
 
+  const unfinishedCount = records.length - a.total.games;
   html.push(`<div class="card">
     <h2>Results for <b>${esc(username)}</b></h2>
-    <p class="section-note">${newCount} newly analyzed game(s)${oldCount ? ` merged with ${oldCount} from the loaded report` : ''} · ${a.analyzedCount} of ${a.total.games} games have move-quality data</p>
+    <p class="section-note">${newCount} newly analyzed game(s)${oldCount ? ` merged with ${oldCount} from the loaded report` : ''} · ${a.analyzedCount} of ${records.length} games have move-quality data${unfinishedCount ? ` · ${unfinishedCount} unfinished/undecided game(s) excluded from W-D-L and score` : ''}</p>
     <div class="summary-cards">
       <div class="stat-card"><span class="big">${a.total.games}</span><span class="label">Games</span></div>
       <div class="stat-card"><span class="big">${a.total.wins}-${a.total.draws}-${a.total.losses}</span><span class="label">W-D-L</span></div>
