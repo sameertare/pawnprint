@@ -18,6 +18,7 @@ let baseReport: ReportData | null = null;
 let records: GameRecord[] = [];
 let currentMarkdown = '';
 let currentAgg: Aggregates | null = null;
+let detectedUsername: string | null = null;
 
 // ---------- dom ----------
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -25,7 +26,8 @@ const fileInput = $('#file-input') as HTMLInputElement;
 const dropzone = $('#dropzone');
 const fileSummary = $('#file-summary');
 const configCard = $('#config-card');
-const usernameSelect = $('#username-select') as HTMLSelectElement;
+const detectedPlayerName = $('#detected-player-name');
+const detectedPlayerCount = $('#detected-player-count');
 const depthSelect = $('#depth-select') as HTMLSelectElement;
 const analyzeBtn = $('#analyze-btn') as HTMLButtonElement;
 const progressWrap = $('#progress-wrap');
@@ -113,27 +115,40 @@ async function handleFiles(files: FileList | File[]) {
   fileSummary.innerHTML = html;
 
   if (parsedGames.length || baseReport) {
-    populateUsernames();
+    const detected = detectMainPlayer();
+    detectedUsername = detected?.name ?? null;
+    detectedPlayerName.textContent = detectedUsername ?? '—';
+    detectedPlayerCount.textContent = detected ? ` — ${detected.count} game${detected.count === 1 ? '' : 's'} will be analyzed` : '';
     configCard.hidden = false;
     configCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
-function populateUsernames() {
-  const counts = new Map<string, number>();
+// Auto-detects who the report is for: the name appearing in the most games (case-insensitively —
+// so the same player isn't split into separate entries by inconsistent header casing), weighted
+// toward a loaded report's existing owner so re-uploads stay attributed to the same player.
+function detectMainPlayer(): { name: string; count: number } | null {
+  const counts = new Map<string, { display: string; count: number }>();
   for (const g of parsedGames) {
-    for (const key of ['White', 'Black']) {
+    for (const key of ['White', 'Black'] as const) {
       const name = g.headers[key];
-      if (name && name !== '?') counts.set(name, (counts.get(name) ?? 0) + 1);
+      if (!name || name === '?') continue;
+      const lower = name.toLowerCase();
+      const entry = counts.get(lower);
+      if (entry) entry.count++;
+      else counts.set(lower, { display: name, count: 1 });
     }
   }
+  if (!counts.size && !baseReport) return null;
   if (baseReport) {
-    counts.set(baseReport.meta.username, (counts.get(baseReport.meta.username) ?? 0) + 10000);
+    const lower = baseReport.meta.username.toLowerCase();
+    if (!counts.has(lower)) counts.set(lower, { display: baseReport.meta.username, count: 0 });
   }
-  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  usernameSelect.innerHTML = sorted
-    .map(([name, n]) => `<option value="${esc(name)}">${esc(name)} (${n >= 10000 ? 'report owner' : n + ' games'})</option>`)
-    .join('');
+  const weight = (lower: string) =>
+    (baseReport && lower === baseReport.meta.username.toLowerCase() ? 10000 : 0) + counts.get(lower)!.count;
+  const bestKey = [...counts.keys()].sort((a, b) => weight(b) - weight(a))[0];
+  const best = counts.get(bestKey)!;
+  return { name: best.display, count: best.count };
 }
 
 fileInput.addEventListener('change', () => {
@@ -161,7 +176,7 @@ $('#load-sample').addEventListener('click', async () => {
 analyzeBtn.addEventListener('click', () => void runAnalysis());
 
 async function runAnalysis() {
-  const username = usernameSelect.value;
+  const username = detectedUsername;
   if (!username) return;
   const depth = parseInt(depthSelect.value, 10);
   const useEngine = depth > 0;
@@ -429,14 +444,14 @@ $('#download-md').addEventListener('click', () => {
   const url = URL.createObjectURL(blob);
   const aEl = document.createElement('a');
   aEl.href = url;
-  aEl.download = `chess-report-${usernameSelect.value || 'player'}-${new Date().toISOString().slice(0, 10)}.md`;
+  aEl.download = `chess-report-${detectedUsername || 'player'}-${new Date().toISOString().slice(0, 10)}.md`;
   aEl.click();
   URL.revokeObjectURL(url);
 });
 
 $('#save-server').addEventListener('click', async () => {
   if (!currentMarkdown) return;
-  const name = `${usernameSelect.value || 'player'}`.replace(/[^\w.-]/g, '_');
+  const name = `${detectedUsername || 'player'}`.replace(/[^\w.-]/g, '_');
   try {
     const resp = await fetch('/api/reports/' + encodeURIComponent(name), {
       method: 'PUT',

@@ -5,7 +5,7 @@ A local-first chess toolkit with **five tools**, each its own single-page app, r
 | Page | Tool | What it does |
 |---|---|---|
 | `index.html` | **Hub** | Landing page linking to the five tools |
-| `analyze.html` | **Analyze PGN** | Deep performance report from chess.com / lichess PGNs |
+| `analyze.html` | **Performance Analysis** | Deep performance report from chess.com / lichess PGNs |
 | `live.html` | **Live & Engine** | Watch a live lichess game with move feedback; best-move suggestion from any position |
 | `swiss.html` | **Swiss Pairings** | Run a full Swiss tournament from a roster |
 | `rating.html` | **USCF Rating Estimator** | Estimate a new US Chess rating after an event |
@@ -13,9 +13,11 @@ A local-first chess toolkit with **five tools**, each its own single-page app, r
 
 ---
 
-## Tool 1 — Analyze PGN
+## Tool 1 — Performance Analysis
 
 Turns PGN files from **chess.com** or **lichess** into a deep, parent-friendly performance report. Stores growing reports as Markdown you can re-open and extend over time.
+
+The player the report is for is **auto-detected**, not picked from a dropdown: whichever name appears in the most games (case-insensitively, so inconsistent header casing can't split one player into separate entries) is assumed to be the report's subject, and every one of their games in the loaded file(s) is analyzed. Re-uploading a saved `.md` report weights its existing owner so the same player stays attributed across sessions.
 
 ---
 
@@ -47,7 +49,7 @@ npm install          # first time only (also fetches the Stockfish engine)
 npm run serve        # builds the SPA and serves it at http://localhost:8787
 ```
 
-Then open **http://localhost:8787**, drop in your PGN(s), pick the player and engine depth, and click **Analyze games**.
+Then open **http://localhost:8787**, drop in your PGN(s), pick an engine depth, and click **Analyze games** — the player is auto-detected for you.
 
 For development with hot reload:
 
@@ -107,7 +109,7 @@ src/
   analyze.ts        per-game analysis: win%, accuracy, errors, phases, patterns
   aggregate.ts      cross-game tables, pattern detection, puzzle recommendations
   markdown.ts       report render + round-trip parse + incremental merge
-  main.ts           Analyze-PGN UI
+  main.ts           Performance Analysis UI
   board.ts          presentation-only chessboard (FEN render, arrows, click-to-move)
   live.ts           Live & Engine UI (position analysis + live-game feedback)
   sparkline.ts      eval-graph rendering, shared by Analyze (static) & Live (interactive/click-to-seek)

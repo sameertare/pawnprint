@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Analyze PGN — PawnPrint</title>
+    <title>Performance Analysis — PawnPrint</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -14,7 +14,7 @@
       <a class="brand" href="index.html">♟ PawnPrint</a>
       <div class="navlinks">
         <a href="index.html">🏠 Home</a>
-        <a href="analyze.html" class="active">Analyze PGN</a>
+        <a href="analyze.html" class="active">Performance Analysis</a>
         <a href="live.html">Live &amp; Engine</a>
         <a href="swiss.html">Swiss Pairings</a>
         <a href="rating.html">USCF Rating</a>
@@ -23,7 +23,7 @@
     </nav>
     <div id="app">
       <header class="app-header">
-        <h1>♞ PGN Performance Analyzer</h1>
+        <h1>♞ Performance Analysis</h1>
         <p class="tagline">Deep performance analysis from your chess.com / lichess PGN files — openings, phases, tactics, patterns &amp; a training plan.</p>
       </header>
 
@@ -41,10 +41,8 @@
 
       <section class="card" id="config-card" hidden>
         <h2><span class="step">2</span> Configure analysis</h2>
+        <p class="hint">Analyzing every game for <b id="detected-player-name">—</b><span id="detected-player-count"></span> — the player who appears most across the loaded games.</p>
         <div class="config-row">
-          <label>Player (whose games to analyze)
-            <select id="username-select"></select>
-          </label>
           <label>Engine depth
             <select id="depth-select">
               <option value="8">Fast — depth 8</option>
