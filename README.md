@@ -1,14 +1,15 @@
 # ♟ PawnPrint
 
-A local-first chess toolkit with **four tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
+A local-first chess toolkit with **five tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
 
 | Page | Tool | What it does |
 |---|---|---|
-| `index.html` | **Hub** | Landing page linking to the four tools |
+| `index.html` | **Hub** | Landing page linking to the five tools |
 | `analyze.html` | **Analyze PGN** | Deep performance report from chess.com / lichess PGNs |
 | `live.html` | **Live & Engine** | Watch a live lichess game with move feedback; best-move suggestion from any position |
 | `swiss.html` | **Swiss Pairings** | Run a full Swiss tournament from a roster |
-| `rating.html` | **Rating Estimator** | Estimate a new US Chess (USCF) rating after an event |
+| `rating.html` | **USCF Rating Estimator** | Estimate a new US Chess rating after an event |
+| `fide-rating.html` | **FIDE Rating Estimator** | Estimate a new FIDE Standard rating after an event |
 
 ---
 
@@ -96,22 +97,24 @@ Prefer the backend features (server report storage) live too? Deploy the whole t
 ## Project layout
 
 ```
-index.html / analyze.html / live.html / swiss.html / rating.html   the five pages (Vite multi-page build)
+index.html / analyze.html / live.html / swiss.html / rating.html / fide-rating.html   the six pages (Vite multi-page build)
 src/
-  types.ts        shared data model (also the shape persisted in the .md)
-  pgn.ts          multi-game PGN splitting & parsing, eval/clock tag extraction
-  openings.ts     opening identification (header → ECOUrl → book)
-  engine.ts       Stockfish 18 (lite) WASM worker wrapper — shared by analyze & live
-  analyze.ts      per-game analysis: win%, accuracy, errors, phases, patterns
-  aggregate.ts    cross-game tables, pattern detection, puzzle recommendations
-  markdown.ts     report render + round-trip parse + incremental merge
-  main.ts         Analyze-PGN UI
-  board.ts        presentation-only chessboard (FEN render, arrows, click-to-move)
-  live.ts         Live & Engine UI (position analysis + live-game feedback)
-  swissEngine.ts  pure Swiss logic: roster parsing, pairing, results, standings
-  swiss.ts        Swiss Pairings UI
-  ratingEngine.ts pure USCF rating-estimate logic
-  rating.ts       Rating Estimator UI
+  types.ts          shared data model (also the shape persisted in the .md)
+  pgn.ts            multi-game PGN splitting & parsing, eval/clock tag extraction
+  openings.ts       opening identification (header → ECOUrl → book)
+  engine.ts         Stockfish 18 (lite) WASM worker wrapper — shared by analyze & live
+  analyze.ts        per-game analysis: win%, accuracy, errors, phases, patterns
+  aggregate.ts      cross-game tables, pattern detection, puzzle recommendations
+  markdown.ts       report render + round-trip parse + incremental merge
+  main.ts           Analyze-PGN UI
+  board.ts          presentation-only chessboard (FEN render, arrows, click-to-move)
+  live.ts           Live & Engine UI (position analysis + live-game feedback)
+  swissEngine.ts    pure Swiss logic: roster parsing, pairing, results, standings
+  swiss.ts          Swiss Pairings UI
+  ratingEngine.ts   pure USCF rating-estimate logic
+  rating.ts         USCF Rating Estimator UI
+  fideRatingEngine.ts pure FIDE rating-estimate logic
+  fideRating.ts     FIDE Rating Estimator UI
 server/
   server.mjs      Express: static hosting, /api/reports save/load, /api/live/:id SSE relay
 public/engine/    Stockfish 18 (lite) worker + wasm
@@ -163,7 +166,7 @@ The pairing engine (`src/swissEngine.ts`) is pure and framework-free. It has bee
 
 ---
 
-## Tool 4 — Rating Estimator (`/rating.html`)
+## Tool 4 — USCF Rating Estimator (`/rating.html`)
 
 Estimate a new US Chess (USCF) rating after an event, using the published rating formula.
 
@@ -173,6 +176,18 @@ Estimate a new US Chess (USCF) rating after an event, using the published rating
 - **Output:** new rating, rating change, performance rating, K value, plus a detail table (win expectancy sum, effective N, established/provisional status, base change vs. bonus) and contextual notes (provisional-rating caveat, junior-player note, dual-rated applicability, single-event swing cap).
 
 This is an **unofficial estimate**, clearly labeled as such in the tool — US Chess's actual post-event computation is run centrally (Glickman-based) and may differ slightly; the estimator mirrors the classic public formula players commonly use to predict their own change. The engine (`src/ratingEngine.ts`) is pure and framework-free.
+
+---
+
+## Tool 5 — FIDE Rating Estimator (`/fide-rating.html`)
+
+Estimate a new FIDE **Standard** rating after an event (Rapid/Blitz use separate rating pools and aren't covered).
+
+- **Inputs:** current rating, total score, number of prior rated games, age (optional), and up to 15 opponent ratings — no dual-rated option, since that's a USCF-specific concept.
+- **Formula:** the same win-expectancy logistic curve with the ±400 cap as the USCF tool, but a FIDE-style flat K-factor tier instead of a dynamic N+games formula: **K = 40** for a player with fewer than 30 rated games, **K = 20** once established and rated below 2400, **K = 10** once established and rated 2400+. No bonus-points provision (FIDE Standard has none).
+- **Output:** new rating, rating change, performance rating, K value, plus games counted, win expectancy sum, and the K-factor tier reason. Notes flag the sub-1400 publication floor and a caveat about federation-specific junior K-factor variants.
+
+Also an **unofficial estimate** (FIDE Handbook B.02) — actual FIDE processing is centralized and by rating period. The engine (`src/fideRatingEngine.ts`) is pure and framework-free.
 
 ---
 

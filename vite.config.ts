@@ -20,6 +20,7 @@ export default defineConfig({
         live: page('./live.html'),
         swiss: page('./swiss.html'),
         rating: page('./rating.html'),
+        fideRating: page('./fide-rating.html'),
       },
     },
   },

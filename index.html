@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PawnPrint — Chess Analysis, Live Engine, Swiss Pairings &amp; Rating Estimator</title>
+    <title>PawnPrint — Chess Analysis, Live Engine, Swiss Pairings &amp; Rating Estimators</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
   </head>
   <body>
@@ -13,13 +13,14 @@
         <a href="analyze.html">Analyze PGN</a>
         <a href="live.html">Live &amp; Engine</a>
         <a href="swiss.html">Swiss Pairings</a>
-        <a href="rating.html">Rating Estimator</a>
+        <a href="rating.html">USCF Rating</a>
+        <a href="fide-rating.html">FIDE Rating</a>
       </div>
     </nav>
     <div id="app">
       <header class="app-header">
         <h1>♟ PawnPrint</h1>
-        <p class="tagline">A toolkit for chess parents, players &amp; organizers. Four tools, each its own app — all running locally with Stockfish 18.</p>
+        <p class="tagline">A toolkit for chess parents, players &amp; organizers. Five tools, each its own app — all running locally with Stockfish 18.</p>
       </header>
 
       <section class="hub-grid">
@@ -46,8 +47,15 @@
 
         <a class="hub-card" href="rating.html">
           <div class="hub-icon">📈</div>
-          <h2>Rating Estimator</h2>
+          <h2>USCF Rating Estimator</h2>
           <p>Estimate your new US Chess rating after an event: enter your current rating, score, prior games and up to 15 opponent ratings to get your new rating, performance rating, K-factor and bonus points.</p>
+          <span class="hub-go">Open estimator →</span>
+        </a>
+
+        <a class="hub-card" href="fide-rating.html">
+          <div class="hub-icon">🌍</div>
+          <h2>FIDE Rating Estimator</h2>
+          <p>Estimate your new FIDE Standard rating after an event: enter your current rating, score, prior games and up to 15 opponent ratings to get your new rating, performance rating and K-factor.</p>
           <span class="hub-go">Open estimator →</span>
         </a>
       </section>
