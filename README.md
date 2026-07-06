@@ -183,9 +183,9 @@ This is an **unofficial estimate**, clearly labeled as such in the tool — US C
 
 Estimate a new FIDE **Standard** rating after an event (Rapid/Blitz use separate rating pools and aren't covered).
 
-- **Inputs:** current rating, total score, number of prior rated games, age (optional), and up to 15 opponent ratings — no dual-rated option, since that's a USCF-specific concept.
-- **Formula:** the same win-expectancy logistic curve with the ±400 cap as the USCF tool, but a FIDE-style flat K-factor tier instead of a dynamic N+games formula: **K = 40** for a player with fewer than 30 rated games, **K = 20** once established and rated below 2400, **K = 10** once established and rated 2400+. No bonus-points provision (FIDE Standard has none).
-- **Output:** new rating, rating change, performance rating, K value, plus games counted, win expectancy sum, and the K-factor tier reason. Notes flag the sub-1400 publication floor and a caveat about federation-specific junior K-factor variants.
+- **Inputs:** current rating, total score, and up to 15 opponent ratings — no prior-games, age, or dual-rated fields (those are USCF-specific or not needed for this simplified estimate).
+- **Formula:** the same win-expectancy logistic curve with the ±400 cap as the USCF tool, but a FIDE-style flat K-factor tier by rating instead of a dynamic N+games formula: **K = 20** below 2400, **K = 10** at 2400+. No bonus-points provision (FIDE Standard has none). Assumes an established rating — FIDE's K=40 tier for a player's first 30 rated games isn't modeled, since that needs a games-played input this tool omits.
+- **Output:** new rating, rating change, performance rating, K value, plus games counted, win expectancy sum, and the K-factor tier reason. Notes flag the established-rating assumption and the sub-1400 publication floor.
 
 Also an **unofficial estimate** (FIDE Handbook B.02) — actual FIDE processing is centralized and by rating period. The engine (`src/fideRatingEngine.ts`) is pure and framework-free.
 

@@ -30,9 +30,6 @@ function fmtSigned(n: number): string {
 function renderResult() {
   const currentRating = parseFloat(($('#f-current') as HTMLInputElement).value);
   const totalScore = parseFloat(($('#f-score') as HTMLInputElement).value);
-  const priorGames = parseFloat(($('#f-priorgames') as HTMLInputElement).value);
-  const ageStr = ($('#f-age') as HTMLInputElement).value.trim();
-  const age = ageStr ? parseFloat(ageStr) : undefined;
   const opponentRatings = readOpponentRatings();
 
   const errorEl = $('#f-error');
@@ -48,13 +45,8 @@ function renderResult() {
     resultsCard.hidden = true;
     return;
   }
-  if (!Number.isFinite(priorGames)) {
-    errorEl.textContent = 'Enter the number of prior rated games.';
-    resultsCard.hidden = true;
-    return;
-  }
 
-  const outcome = estimateFideRating({ currentRating, totalScore, priorGames, age, opponentRatings });
+  const outcome = estimateFideRating({ currentRating, totalScore, opponentRatings });
   if (!outcome.ok) {
     errorEl.textContent = outcome.error;
     resultsCard.hidden = true;
@@ -84,7 +76,7 @@ function renderResult() {
 $('#f-estimate-btn').addEventListener('click', renderResult);
 
 $('#f-clear-btn').addEventListener('click', () => {
-  (['#f-current', '#f-score', '#f-priorgames', '#f-age'] as const).forEach((sel) => (($(sel) as HTMLInputElement).value = ''));
+  (['#f-current', '#f-score'] as const).forEach((sel) => (($(sel) as HTMLInputElement).value = ''));
   document.querySelectorAll<HTMLInputElement>('.opp-input').forEach((el) => (el.value = ''));
   $('#f-error').textContent = '';
   ($('#f-results-card') as HTMLElement).hidden = true;

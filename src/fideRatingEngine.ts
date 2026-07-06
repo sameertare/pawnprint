@@ -1,15 +1,17 @@
 /**
  * FIDE (Standard) rating estimator — an unofficial approximation of the published FIDE rating
  * formula (FIDE Handbook B.02): win expectancy on the logistic curve with the 400-point cap, and
- * a K-factor that's a flat tier lookup (new players / sub-2400 / 2400+) rather than USCF's
- * dynamic N+games formula. FIDE's Standard rating has no bonus-points provision.
+ * a K-factor that's a flat tier lookup by rating (rather than USCF's dynamic N+games formula).
+ * FIDE's Standard rating has no bonus-points provision.
+ *
+ * Simplified to rating-only K-factor tiers (no prior-games or age input): this assumes an
+ * established player. FIDE also uses K=40 for a player's first 30 rated games regardless of
+ * rating, which isn't modeled here since that requires knowing the games-played count.
  */
 
 export interface FideEstimateInput {
   currentRating: number;
   totalScore: number;
-  priorGames: number; // total FIDE-rated (Standard) games played before this event/period
-  age?: number;
   opponentRatings: number[]; // 1-15 entries
 }
 
@@ -30,7 +32,6 @@ export type FideEstimateOutcome =
 
 const MIN_RATING = 100;
 const MAX_RATING = 3000;
-const NEW_PLAYER_GAMES = 30;
 const HIGH_RATING_THRESHOLD = 2400;
 const RATING_DIFF_CAP = 400;
 const FIDE_PUBLISH_FLOOR = 1400;
@@ -44,25 +45,19 @@ function winExpectancy(playerRating: number, opponentRating: number): number {
   return 1 / (1 + Math.pow(10, -diff / 400));
 }
 
-function kFactorFor(priorGames: number, currentRating: number): { k: number; label: string } {
-  if (priorGames < NEW_PLAYER_GAMES) {
-    return { k: 40, label: `New to the rating list (fewer than ${NEW_PLAYER_GAMES} rated games)` };
-  }
+function kFactorFor(currentRating: number): { k: number; label: string } {
   if (currentRating >= HIGH_RATING_THRESHOLD) {
     return { k: 10, label: `Rated ${HIGH_RATING_THRESHOLD}+` };
   }
-  return { k: 20, label: `Established, rated below ${HIGH_RATING_THRESHOLD}` };
+  return { k: 20, label: `Rated below ${HIGH_RATING_THRESHOLD}` };
 }
 
 export function estimateFideRating(input: FideEstimateInput): FideEstimateOutcome {
-  const { currentRating, totalScore, priorGames, age } = input;
+  const { currentRating, totalScore } = input;
   const opponents = input.opponentRatings.filter((r) => Number.isFinite(r));
 
   if (!Number.isFinite(currentRating) || currentRating < MIN_RATING || currentRating > MAX_RATING) {
     return { ok: false, error: `Current rating must be between ${MIN_RATING} and ${MAX_RATING}.` };
-  }
-  if (!Number.isFinite(priorGames) || priorGames < 0) {
-    return { ok: false, error: 'Number of prior games must be zero or more.' };
   }
   if (opponents.length === 0) {
     return { ok: false, error: 'Enter at least one opponent rating.' };
@@ -78,11 +73,10 @@ export function estimateFideRating(input: FideEstimateInput): FideEstimateOutcom
     return { ok: false, error: `Total score must be between 0 and ${n} (the number of opponents entered).` };
   }
 
-  const notes: string[] = [];
-  const { k, label } = kFactorFor(priorGames, currentRating);
-  if (age !== undefined && Number.isFinite(age) && age < 18 && currentRating < 2300 && priorGames >= NEW_PLAYER_GAMES) {
-    notes.push('Some FIDE rule variants retain a higher K-factor for players under 18 rated below 2300 — check with your federation if this applies to you.');
-  }
+  const notes: string[] = [
+    'Assumes an established rating. FIDE uses K=40 for a player\'s first 30 rated games regardless of rating — not modeled here.',
+  ];
+  const { k, label } = kFactorFor(currentRating);
 
   const we = opponents.reduce((sum, opp) => sum + winExpectancy(currentRating, opp), 0);
   const ratingChange = k * (totalScore - we);
