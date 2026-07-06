@@ -145,10 +145,16 @@ How the live board works: the browser streams `GET https://lichess.org/api/strea
 
 Run a complete Swiss-system tournament in the browser.
 
-- **Roster input:** paste players (one per line — `Name`, `Name Rating`, or `Name, Rating`, with optional `1.` numbering) **or** upload a `.txt` / `.csv` file. Ratings are optional.
-- **Pairing engine:** Dutch-style fold pairing — round 1 pairs the top half vs the bottom half by rating; later rounds pair within score groups, down-float odd players, avoid rematches (with a global rematch-free fallback), balance colors, and assign byes (full point) to the lowest player who hasn't had one.
-- **Results & standings:** enter 1-0 / ½-½ / 0-1 per board; standings update live with **Buchholz** and **Sonneborn-Berger** tiebreaks, W/D/L, and color balance.
-- **Persistence:** tournament state auto-saves in your browser (localStorage). **Export/Import** the whole event as JSON, and **Print standings** for posting.
+- **Roster format is explicit, not auto-detected** — pick **Plain list**, **US Chess table**, or **NWChess RosterTable.csv** from the format dropdown before creating the tournament. Each format shows its own hint text and its own "Load a sample roster" example.
+  - **Plain list:** one player per line — `Name`, `Name Rating`, or `Name, Rating`, with optional `1.` numbering.
+  - **US Chess table:** a labeled wallchart table (`#`, `Name`, `US Chess ID`, `Rating`, `Bye Rds`, …), tab- or comma-separated **or pasted with plain single spaces** (e.g. copied straight off a web page) — the column layout is detected either way.
+  - **NWChess RosterTable.csv:** FIDE ratings are ignored, each player is seeded by **max(NWSRS, USCF)**, withdrawn players are dropped. If the roster spans several sections (e.g. *Newport Open*, *Somerset U1700*), creating the tournament sets up **every section at once**.
+- **Multi-section events:** when a roster has sections, one "Pair next round" click pairs **all sections together**; a tab bar lets you switch between sections, each with its own pairings/results/standings. "Print all standings" prints a wall chart covering every section.
+- **Bye requests:** if the roster's bye column names round(s) a player is sitting out (e.g. `3` or `4,5`), that player is automatically given a **half-point bye** in that round instead of being paired, and the rest of the field pairs normally around them.
+- **Pairing engine:** Dutch-style fold pairing — round 1 pairs the top half vs the bottom half by rating; later rounds pair within score groups, down-float odd players, avoid rematches (with a global rematch-free fallback), balance colors, and assign a full-point bye to the lowest player who hasn't had one when the field (after bye requests) is odd.
+- **Results & standings:** enter 1-0 / ½-½ / 0-1 per board; standings update live with **Buchholz** and **Sonneborn-Berger** tiebreaks, W/D/L (a requested half-point bye counts as a draw, a forced full-point bye counts as a win), and color balance.
+- **Persistence:** the whole event auto-saves in your browser (localStorage). **Export/Import** it as JSON, and **Print all standings** for posting.
+- **Navigation:** every tool page has a **🏠 Home** link in the top nav back to the PawnPrint hub — your tournament stays saved when you navigate away and back.
 
 The pairing engine (`src/swissEngine.ts`) is pure and framework-free. It has been stress-tested across many field sizes, round counts, and result models: no rematches when mathematically avoidable, byes capped at one per player, and conserved scores.
 

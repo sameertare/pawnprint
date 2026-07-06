@@ -10,6 +10,7 @@
     <nav class="topnav">
       <a class="brand" href="index.html">♟ PawnPrint</a>
       <div class="navlinks">
+        <a href="index.html">🏠 Home</a>
         <a href="analyze.html">Analyze PGN</a>
         <a href="live.html">Live &amp; Engine</a>
         <a href="swiss.html" class="active">Swiss Pairings</a>
@@ -24,11 +25,19 @@
       <section class="card" id="setup-card">
         <h2><span class="step">1</span> Roster</h2>
         <div class="config-row">
-          <label class="stack" style="flex:1; min-width:260px;">Tournament name
+          <label class="stack" style="flex:1; min-width:220px;">Tournament name
             <input type="text" id="tname" class="text-input" placeholder="Spring Scholastic Open" />
           </label>
+          <label class="stack">Roster format
+            <select id="format-select">
+              <option value="plain" selected>Plain list (Name / Name Rating)</option>
+              <option value="table">US Chess table (labeled columns)</option>
+              <option value="nwchess">NWChess RosterTable.csv</option>
+            </select>
+          </label>
         </div>
-        <label class="stack">Paste players (one per line — <code>Name</code>, <code>Name Rating</code>, or <code>Name, Rating</code>)
+        <p class="hint" id="format-hint"></p>
+        <label class="stack">Paste players (one per line — <code>Name</code>, <code>Name Rating</code>, or <code>Name, Rating</code>) — or upload an <b>NWChess RosterTable.csv</b>
           <textarea id="roster-text" class="text-area" rows="8" placeholder="1. Magnus Carlsen, 2839
 Hikaru Nakamura 2794
 Fabiano Caruana, 2776
@@ -36,8 +45,13 @@ Alireza Firouzja 2777
 Ding Liren
 Ian Nepomniachtchi 2758"></textarea>
         </label>
+        <div class="config-row" id="section-row" hidden>
+          <label class="stack">Section to pair
+            <select id="section-filter"></select>
+          </label>
+        </div>
         <div class="btn-row">
-          <label class="btn" for="roster-file">📂 Upload roster file</label>
+          <label class="btn" for="roster-file">📂 Upload roster file (.txt / .csv)</label>
           <input type="file" id="roster-file" accept=".txt,.csv" hidden />
           <button id="parse-btn" class="btn btn-primary">Create tournament →</button>
           <button id="sample-roster" class="btn btn-ghost">Load a sample roster</button>
@@ -54,9 +68,10 @@ Ian Nepomniachtchi 2758"></textarea>
           <button id="export-json" class="btn">⬇ Export</button>
           <label class="btn" for="import-json">📂 Import</label>
           <input type="file" id="import-json" accept=".json" hidden />
-          <button id="print-btn" class="btn">🖨 Print standings</button>
+          <button id="print-btn" class="btn">🖨 Print all standings</button>
           <button id="reset-tourn" class="btn btn-ghost">Reset</button>
         </div>
+        <div id="section-tabs" class="section-tabs" hidden></div>
         <div id="rounds"></div>
       </section>
 
@@ -66,8 +81,10 @@ Ian Nepomniachtchi 2758"></textarea>
         <p class="hint">Tiebreaks: <b>Buchholz</b> (sum of opponents' scores) then <b>Sonneborn-Berger</b>. Byes score a full point.</p>
       </section>
 
+      <div id="print-area"></div>
+
       <footer class="app-footer">
-        PawnPrint · Swiss engine runs locally · tournament state auto-saves in your browser
+        PawnPrint · Swiss engine runs locally · event state auto-saves in your browser
       </footer>
     </div>
     <script type="module" src="/src/swiss.ts"></script>

@@ -8,9 +8,11 @@ export interface Player {
   name: string;
   rating: number | null;
   score: number;
-  opponents: number[];   // opponent ids per round played (byes recorded as -1)
-  colors: Color[];       // colors received in order
-  byes: number;
+  opponents: number[];    // opponent ids per round played (byes recorded as -1)
+  colors: Color[];        // colors received in order
+  byes: number;           // forced (unpaired) full-point byes received
+  requestedByes: number;  // requested half-point byes received
+  byeRequests: number[];  // round numbers the player asked to sit out, from the roster import
   withdrawn: boolean;
 }
 
@@ -18,8 +20,9 @@ export interface Pairing {
   board: number;
   whiteId: number | null;
   blackId: number | null;
-  byeId: number | null;  // full-point bye
-  result: GameResult;    // null until entered; byes auto-scored
+  byeId: number | null;     // bye (requested or forced)
+  byePoints?: 0.5 | 1;       // 0.5 = requested bye, 1 = forced (unpaired) bye — defaults to 1 if absent
+  result: GameResult;        // null until entered; byes auto-scored
 }
 
 export interface Round {
@@ -36,8 +39,164 @@ export interface Tournament {
 }
 
 // ---------------- roster parsing ----------------
-export function parseRoster(text: string): { name: string; rating: number | null }[] {
-  const out: { name: string; rating: number | null }[] = [];
+export interface RosterEntry {
+  name: string;
+  rating: number | null;
+  section?: string;
+  byeRounds?: number[]; // round numbers this player requested off, if the roster specified any
+}
+
+/** A rating token is valid only if it's a plausible chess rating (0/blank/unrated → absent). */
+function ratingOrNull(v: string | undefined): number | null {
+  const n = parseInt((v ?? '').trim(), 10);
+  return !isNaN(n) && n >= 100 && n <= 3500 ? n : null;
+}
+
+/** Split one CSV line, honouring double-quoted fields (which may contain commas, e.g. byes "4,5"). */
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } // escaped quote
+        else inQ = false;
+      } else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ',') { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+/** Detect a NWChess RosterTable.csv export (grouped header with NWSRS / USCF / FIDE columns). */
+function isNwchessRoster(text: string): boolean {
+  const head = text.replace(/\r/g, '').split('\n').slice(0, 3).join(' ');
+  return /\bNWSRS\b/i.test(head) && /\bUSCF\b/i.test(head) && /\bFIDE\b/i.test(head);
+}
+
+/**
+ * NWChess roster: fixed 16-column layout —
+ * 0 section · 1 last · 2 first · 3 grade · 4 school · 5 NWSRS · 6 NWSRS-id ·
+ * 7 USCF · 8 USCF-id · 9 USCF-exp · 10 FIDE · 11 FIDE-id · 12 title · 13 exp · 14 byes · 15 fees.
+ * FIDE is ignored; the pairing rating is max(NWSRS, USCF). "Withdrew" players are dropped.
+ */
+function parseNwchessRoster(text: string): RosterEntry[] {
+  const out: RosterEntry[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.replace(/\r/g, '').split('\n')) {
+    if (!raw.trim()) continue;
+    const c = parseCsvLine(raw).map((f) => f.trim());
+    if (c.length < 8) continue;
+    const section = c[0];
+    const last = c[1];
+    const first = c[2];
+    if (!last || last.toLowerCase() === 'name' || first.toLowerCase() === 'first') continue; // header rows
+    if (section.toLowerCase() === 'withdrew') continue; // not playing
+    const nwsrs = ratingOrNull(c[5]);
+    const uscf = ratingOrNull(c[7]);
+    // FIDE (c[10]) intentionally ignored.
+    const rated = [nwsrs, uscf].filter((x): x is number => x != null);
+    const rating = rated.length ? Math.max(...rated) : null;
+    const name = `${first} ${last}`.replace(/\s{2,}/g, ' ').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const byeRounds = parseByeRounds(c[14]); // "Byes" column, e.g. "4,5"
+    out.push({ name, rating, section: section || undefined, ...(byeRounds.length ? { byeRounds } : {}) });
+  }
+  return out;
+}
+
+function splitDelimited(line: string, kind: 'tab' | 'csv' | 'space'): string[] {
+  if (kind === 'tab') return line.split('\t');
+  if (kind === 'csv') return parseCsvLine(line);
+  return line.split(/\s{2,}/);
+}
+
+/**
+ * Extract a bye-round request from whatever trails the rating on a wallchart line
+ * (e.g. "3", "4,5", "R4"). Returns the requested round numbers, or [] if none.
+ */
+function parseByeRounds(trailing: string | undefined): number[] {
+  if (!trailing) return [];
+  return [...trailing.matchAll(/\d+/g)].map((m) => parseInt(m[0], 10)).filter((n) => n > 0 && n < 50);
+}
+
+/**
+ * Fallback for a wallchart row where columns collapsed to single spaces (very common when a
+ * table is pasted from a web page and its internal whitespace gets normalized). Matches
+ * "<rank> <name …> [<id 5-10 digits>] <rating 2-4 digits> [<bye rounds>]" — the non-greedy
+ * name group naturally stops right before the numeric ID/rating tokens regardless of how many
+ * words the name has or how many spaces separate columns.
+ */
+function parseWallchartLine(line: string): { name: string; rating: number | null; byeRounds: number[] } | null {
+  let m = line.match(/^\s*\d+[.)]?\s+(.+?)\s+\d{5,10}\s+(\d{2,4})\b\s*(.*)$/);
+  if (!m) m = line.match(/^\s*\d+[.)]?\s+(.+?)\s+(\d{2,4})\s*(.*)$/); // no ID column
+  if (!m) return null;
+  const name = m[1].trim();
+  if (!name) return null;
+  const rating = ratingOrNull(m[2]);
+  return { name, rating, byeRounds: parseByeRounds(m[3]) };
+}
+
+/**
+ * A delimited roster with a header row that labels the columns — e.g. a US Chess wallchart
+ * (`#`, `Name`, `US Chess ID`, `Rating`, `Bye Rds`). Maps the Name and Rating columns by their
+ * header labels and ignores ID / rank / bye columns. Returns null if there's no such header.
+ */
+function parseHeaderTable(text: string): RosterEntry[] | null {
+  const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim());
+  if (lines.length < 2) return null;
+  const header = lines[0];
+  const kind: 'tab' | 'csv' | 'space' = header.includes('\t') ? 'tab' : header.includes(',') ? 'csv' : 'space';
+
+  if (kind !== 'space') {
+    const cols = splitDelimited(header, kind).map((c) => c.trim().toLowerCase());
+    const nameIdx = cols.findIndex((c) => c === 'name' || c === 'player' || c === 'player name' || c === 'full name');
+    // rating column, but never an ID column ("US Chess ID", "USCF ID", …)
+    const ratingIdx = cols.findIndex((c) => /^(rating|rtg|elo|uscf|reg)/.test(c) && !/\bid\b/.test(c));
+    if (nameIdx !== -1 && ratingIdx !== -1) {
+      const byeIdx = cols.findIndex((c) => /^bye/.test(c));
+      const out: RosterEntry[] = [];
+      const seen = new Set<string>();
+      for (let i = 1; i < lines.length; i++) {
+        const f = splitDelimited(lines[i], kind).map((c) => c.trim());
+        const name = (f[nameIdx] ?? '').replace(/\s{2,}/g, ' ').trim();
+        if (!name || name.toLowerCase() === 'name') continue;
+        const rating = ratingOrNull(f[ratingIdx]);
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const byeRounds = byeIdx !== -1 ? parseByeRounds(f[byeIdx]) : [];
+        out.push({ name, rating, ...(byeRounds.length ? { byeRounds } : {}) });
+      }
+      if (out.length) return out;
+    }
+  }
+
+  // Single-space (or unlabeled-column) wallchart: parse row-by-row with the pattern matcher.
+  // The header line naturally fails to match (it doesn't start with a rank number) and is skipped.
+  const out: RosterEntry[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const row = parseWallchartLine(line);
+    if (!row) continue;
+    const key = row.name.toLowerCase();
+    if (key === 'name' || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: row.name, rating: row.rating, ...(row.byeRounds.length ? { byeRounds: row.byeRounds } : {}) });
+  }
+  return out.length ? out : null;
+}
+
+/** Free-form list: one player per line, e.g. "Name", "Name Rating", "Name, Rating", "1. Name Rating". */
+function parsePlainList(text: string): RosterEntry[] {
+  const out: RosterEntry[] = [];
   const seen = new Set<string>();
   for (let raw of text.replace(/\r/g, '').split('\n')) {
     let line = raw.trim();
@@ -65,10 +224,20 @@ export function parseRoster(text: string): { name: string; rating: number | null
   return out;
 }
 
-export function createTournament(
-  name: string,
-  roster: { name: string; rating: number | null }[]
-): Tournament {
+export type RosterFormat = 'auto' | 'nwchess' | 'table' | 'plain';
+
+export function parseRoster(text: string, format: RosterFormat = 'auto'): RosterEntry[] {
+  switch (format) {
+    case 'nwchess': return parseNwchessRoster(text);
+    case 'table': return parseHeaderTable(text) ?? [];
+    case 'plain': return parsePlainList(text);
+    default:
+      if (isNwchessRoster(text)) return parseNwchessRoster(text);
+      return parseHeaderTable(text) ?? parsePlainList(text);
+  }
+}
+
+export function createTournament(name: string, roster: RosterEntry[]): Tournament {
   return {
     name: name || 'Swiss Tournament',
     createdAt: new Date().toISOString(),
@@ -80,6 +249,8 @@ export function createTournament(
       opponents: [],
       colors: [],
       byes: 0,
+      requestedByes: 0,
+      byeRequests: r.byeRounds ?? [],
       withdrawn: false,
     })),
     rounds: [],
@@ -196,17 +367,25 @@ function pairBracket(pool: Player[]): { pairs: [Player, Player][]; floater: Play
 }
 
 export function pairNextRound(t: Tournament): Round {
+  const nextRoundNo = t.rounds.length + 1;
   const active = t.players.filter((p) => !p.withdrawn);
+
+  // Honour requested byes for this specific round — those players sit out with a half-point,
+  // and everyone else is paired as usual.
+  const requestedOut = active.filter((p) => (p.byeRequests ?? []).includes(nextRoundNo));
+  const requestedOutIds = new Set(requestedOut.map((p) => p.id));
+  const eligible = active.filter((p) => !requestedOutIds.has(p.id));
+
   const bySeed = (x: Player, y: Player) =>
     y.score - x.score || (y.rating ?? 0) - (x.rating ?? 0) || x.id - y.id;
-  const sorted = [...active].sort(bySeed);
+  const sorted = [...eligible].sort(bySeed);
 
   let byePlayer: Player | null = null;
   let pool = sorted;
   if (sorted.length % 2 === 1) {
     // bye to the lowest-standing player who has had the fewest byes
     const candidates = [...sorted].sort(
-      (x, y) => x.byes - y.byes || x.score - y.score || (x.rating ?? 0) - (y.rating ?? 0)
+      (x, y) => (x.byes ?? 0) - (y.byes ?? 0) || x.score - y.score || (x.rating ?? 0) - (y.rating ?? 0)
     );
     byePlayer = candidates[0];
     pool = sorted.filter((p) => p.id !== byePlayer!.id);
@@ -241,11 +420,14 @@ export function pairNextRound(t: Tournament): Round {
     const { whiteId, blackId } = assignColors(a, b);
     return { board: i + 1, whiteId, blackId, byeId: null, result: null };
   });
+  for (const p of requestedOut) {
+    pairings.push({ board: pairings.length + 1, whiteId: null, blackId: null, byeId: p.id, byePoints: 0.5, result: null });
+  }
   if (byePlayer) {
-    pairings.push({ board: pairings.length + 1, whiteId: null, blackId: null, byeId: byePlayer.id, result: null });
+    pairings.push({ board: pairings.length + 1, whiteId: null, blackId: null, byeId: byePlayer.id, byePoints: 1, result: null });
   }
 
-  const round: Round = { number: t.rounds.length + 1, pairings, complete: false };
+  const round: Round = { number: nextRoundNo, pairings, complete: false };
   return round;
 }
 
@@ -255,10 +437,11 @@ export function commitRound(t: Tournament, round: Round) {
   for (const pr of round.pairings) {
     if (pr.byeId != null) {
       const p = byId.get(pr.byeId)!;
+      const points = pr.byePoints ?? 1;
       p.opponents.push(-1);
-      p.byes++;
-      p.score += 1; // full-point bye
-      pr.result = '1-0'; // marker; not a real game
+      if (points === 0.5) p.requestedByes = (p.requestedByes ?? 0) + 1;
+      else p.byes = (p.byes ?? 0) + 1;
+      p.score += points;
     } else {
       const w = byId.get(pr.whiteId!)!;
       const b = byId.get(pr.blackId!)!;
@@ -327,8 +510,9 @@ export function standings(t: Tournament): Standing[] {
         else if (iLost) { losses++; }
       }
     });
-    // count bye wins toward win column
-    wins += p.byes;
+    // forced (full-point) byes read as wins; requested (half-point) byes read as draws
+    wins += p.byes ?? 0;
+    draws += p.requestedByes ?? 0;
     return {
       player: p,
       score: p.score,
