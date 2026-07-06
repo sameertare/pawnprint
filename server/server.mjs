@@ -14,6 +14,7 @@ const REPORTS_DIR = path.join(ROOT, 'reports');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8787;
 
 const app = express();
+app.use(express.json());
 app.use(express.text({ type: ['text/markdown', 'text/plain'], limit: '20mb' }));
 
 const safeName = (name) => /^[\w.-]{1,80}$/.test(name);
@@ -97,6 +98,104 @@ app.get('/api/live/:id', async (req, res) => {
     if (!controller.signal.aborted) {
       try { send({ __meta: 'error', message: String(e && e.message ? e.message : e) }); res.end(); } catch { /* client gone */ }
     }
+  }
+});
+
+// ---- Middlegame Plans API (calls Claude API) ----
+app.post('/api/middlegame-plans', async (req, res) => {
+  const { opening, color } = req.body;
+  if (!opening || typeof opening !== 'string' || !color || !['White', 'Black'].includes(color)) {
+    return res.status(400).json({ error: 'Invalid opening or color' });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'API key not configured' });
+  }
+
+  try {
+    const prompt = `You are a chess expert providing middlegame strategy guidance.
+
+The user is asking for middlegame plans for: ${opening}
+Playing as: ${color}
+
+Provide a comprehensive middlegame strategy response in the following JSON format (and ONLY this format):
+{
+  "opening": "${opening}",
+  "color": "${color === 'White' ? 'w' : 'b'}",
+  "plans": [
+    "Plan 1 detailed description",
+    "Plan 2 detailed description",
+    "Plan 3 detailed description",
+    "Plan 4 detailed description",
+    "Plan 5 detailed description"
+  ],
+  "keyThemes": [
+    "Theme 1",
+    "Theme 2",
+    "Theme 3",
+    "Theme 4",
+    "Theme 5"
+  ],
+  "pawnStructure": "Detailed explanation of typical pawn structure for this opening as ${color}",
+  "pieceActivation": "Detailed explanation of how to activate pieces in this opening",
+  "typicalManeuvres": [
+    "Maneuver 1",
+    "Maneuver 2",
+    "Maneuver 3",
+    "Maneuver 4",
+    "Maneuver 5"
+  ],
+  "commonTactics": [
+    "Tactic 1",
+    "Tactic 2",
+    "Tactic 3",
+    "Tactic 4",
+    "Tactic 5"
+  ]
+}
+
+Ensure all fields are present and contain detailed, practical chess advice specific to ${opening} when playing as ${color}. The response must be valid JSON with no additional text.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('Claude API error:', error);
+      return res.status(500).json({ error: 'Failed to generate plans' });
+    }
+
+    const data = await response.json();
+    const content = data.content[0]?.text;
+
+    if (!content) {
+      return res.status(500).json({ error: 'No content from API' });
+    }
+
+    // Extract JSON from response (in case there's extra text)
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('Could not parse JSON from response:', content);
+      return res.status(500).json({ error: 'Invalid response format' });
+    }
+
+    const plans = JSON.parse(jsonMatch[0]);
+    res.json(plans);
+  } catch (e) {
+    console.error('Error generating middlegame plans:', e);
+    res.status(500).json({ error: String(e) });
   }
 });
 

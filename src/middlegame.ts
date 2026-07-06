@@ -1,12 +1,9 @@
 import './style.css';
 import { Chess } from 'chess.js';
-import { openingDb, findOpeningByName, findOpeningByMoves } from './openingDb';
 import type { Color } from './types';
 
 interface MiddlegamePlan {
   opening: string;
-  eco?: string;
-  moves?: string;
   color: Color;
   plans: string[];
   keyThemes: string[];
@@ -44,7 +41,26 @@ function esc(s: string): string {
   return div.innerHTML;
 }
 
-document.getElementById('search-opening-btn')?.addEventListener('click', () => {
+async function fetchMiddlegamePlans(opening: string, color: Color): Promise<MiddlegamePlan | null> {
+  try {
+    const response = await fetch('/api/middlegame-plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opening, color: color === 'w' ? 'White' : 'Black' }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (e) {
+    console.error('Failed to fetch middlegame plans:', e);
+    return null;
+  }
+}
+
+document.getElementById('search-opening-btn')?.addEventListener('click', async () => {
   const name = (document.getElementById('opening-name') as HTMLInputElement).value.trim();
   const color = (document.getElementById('player-color') as HTMLSelectElement).value as Color;
 
@@ -53,39 +69,20 @@ document.getElementById('search-opening-btn')?.addEventListener('click', () => {
     return;
   }
 
-  const results = findOpeningByName(name);
-  if (results.length === 0) {
-    (document.getElementById('opening-suggestions') as HTMLElement).innerHTML =
-      '<p class="hint error">No openings found. Try variations like "Sicilian Dragon", "Ruy Lopez", "French Defense".</p>';
+  const suggestionsEl = document.getElementById('opening-suggestions') as HTMLElement;
+  suggestionsEl.innerHTML = '<p class="hint">Loading middlegame plans...</p>';
+
+  const plan = await fetchMiddlegamePlans(name, color);
+
+  if (!plan) {
+    suggestionsEl.innerHTML = '<p class="hint error">Could not generate plans for this opening. Please try another opening name.</p>';
     return;
   }
 
-  if (results.length === 1) {
-    displayPlan(results[0], color);
-  } else {
-    const html = results
-      .map(
-        (r) => `
-      <div class="suggestion-item">
-        <div><strong>${esc(r.opening)}</strong> ${r.eco ? `(${r.eco})` : ''}</div>
-        ${r.moves ? `<div class="hint">${esc(r.moves)}</div>` : ''}
-        <button class="btn btn-ghost btn-sm" data-opening="${esc(r.opening)}">Select</button>
-      </div>
-    `
-      )
-      .join('');
-    (document.getElementById('opening-suggestions') as HTMLElement).innerHTML = html;
-
-    document.querySelectorAll<HTMLButtonElement>('[data-opening]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const selected = results.find((r) => r.opening === btn.dataset.opening);
-        if (selected) displayPlan(selected, color);
-      });
-    });
-  }
+  displayPlan(plan, name);
 });
 
-document.getElementById('parse-moves-btn')?.addEventListener('click', () => {
+document.getElementById('parse-moves-btn')?.addEventListener('click', async () => {
   const movesText = (document.getElementById('moves-input') as HTMLTextAreaElement).value.trim();
   const color = (document.getElementById('moves-player-color') as HTMLSelectElement).value as Color;
 
@@ -95,7 +92,6 @@ document.getElementById('parse-moves-btn')?.addEventListener('click', () => {
   }
 
   const statusEl = document.getElementById('move-parse-status') as HTMLElement;
-
   const moves = movesText.split(/\s+/).filter(Boolean);
   const chess = new Chess();
 
@@ -103,7 +99,7 @@ document.getElementById('parse-moves-btn')?.addEventListener('click', () => {
     for (const move of moves) {
       const result = chess.move(move, { sloppy: true });
       if (!result) {
-        statusEl.textContent = `Error: Invalid move "${move}" at position ${chess.fen()}`;
+        statusEl.textContent = `Error: Invalid move "${move}"`;
         return;
       }
     }
@@ -112,78 +108,35 @@ document.getElementById('parse-moves-btn')?.addEventListener('click', () => {
     return;
   }
 
-  const fen = chess.fen();
-  const results = findOpeningByMoves(moves);
+  statusEl.innerHTML = '<p class="hint">Identifying opening and loading plans...</p>';
 
-  if (results.length === 0) {
-    statusEl.innerHTML = '<p class="hint">Opening not found in database, but moves are valid.</p>';
-    const plan = createCustomPlan(moves.join(' '), fen, color);
-    displayPlan(plan, color);
-  } else if (results.length === 1) {
-    statusEl.innerHTML = `<p class="hint">Opening identified: <strong>${esc(results[0].opening)}</strong></p>`;
-    displayPlan(results[0], color);
-  } else {
-    statusEl.innerHTML = '<p class="hint">Multiple possible openings:</p>';
-    const html = results
-      .map(
-        (r) => `
-      <div class="suggestion-item">
-        <div><strong>${esc(r.opening)}</strong> ${r.eco ? `(${r.eco})` : ''}</div>
-        <button class="btn btn-ghost btn-sm" data-opening="${esc(r.opening)}">Select</button>
-      </div>
-    `
-      )
-      .join('');
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    statusEl.appendChild(container);
+  // Create a descriptive opening name from the moves
+  const openingDesc = `Opening after: ${moves.slice(0, 8).join(' ')}${moves.length > 8 ? '...' : ''}`;
+  const plan = await fetchMiddlegamePlans(openingDesc, color);
 
-    container.querySelectorAll<HTMLButtonElement>('[data-opening]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const selected = results.find((r) => r.opening === btn.dataset.opening);
-        if (selected) displayPlan(selected, color);
-      });
-    });
+  if (!plan) {
+    statusEl.innerHTML = '<p class="hint error">Could not generate plans for this position. Try a different move sequence.</p>';
+    return;
   }
+
+  displayPlan(plan, openingDesc);
+  statusEl.innerHTML = '';
 });
 
-function createCustomPlan(moves: string, fen: string, color: Color): MiddlegamePlan {
-  return {
-    opening: `Custom Position (${moves})`,
-    color,
-    plans: [
-      'Centralize your pieces to control key squares',
-      'Maintain pawn structure flexibility',
-      'Look for tactical opportunities',
-    ],
-    keyThemes: ['Center control', 'Piece activity', 'King safety'],
-    typicalManeuvres: [
-      'Rearrange pieces for better coordination',
-      'Push passed pawns',
-      'Create weaknesses in opponent position',
-    ],
-    pieceActivation: 'Activate all pieces toward the center or weak squares.',
-    pawnStructure: 'Analyze the pawn structure and identify fixed weaknesses.',
-    commonTactics: ['Forks', 'Pins', 'Skewers', 'Double attacks'],
-  };
-}
-
-function displayPlan(opening: typeof openingDb[0], color: Color): void {
-  currentPlan = opening.plans[color === 'w' ? 'white' : 'black'];
-  currentPlan.color = color;
+function displayPlan(plan: MiddlegamePlan, openingName: string): void {
+  currentPlan = plan;
 
   exportData = {
-    opening: opening.opening,
-    color: color === 'w' ? 'White' : 'Black',
-    plan: currentPlan,
+    opening: openingName,
+    color: plan.color === 'w' ? 'White' : 'Black',
+    plan: plan,
   };
 
   const headerEl = document.getElementById('opening-header') as HTMLElement;
   headerEl.innerHTML = `
     <div class="opening-info">
-      <div><strong>${esc(opening.opening)}</strong> ${opening.eco ? `(${opening.eco})` : ''}</div>
-      <div class="hint">Playing as <strong>${color === 'w' ? 'White' : 'Black'}</strong></div>
-      ${opening.moves ? `<div class="hint">Typical moves: ${esc(opening.moves)}</div>` : ''}
+      <div><strong>${esc(openingName)}</strong></div>
+      <div class="hint">Playing as <strong>${plan.color === 'w' ? 'White' : 'Black'}</strong></div>
     </div>
   `;
 
@@ -192,38 +145,38 @@ function displayPlan(opening: typeof openingDb[0], color: Color): void {
     <section class="plan-section">
       <h3>📌 Key Strategic Themes</h3>
       <ul>
-        ${currentPlan.keyThemes.map((t) => `<li>${esc(t)}</li>`).join('')}
+        ${plan.keyThemes.map((t) => `<li>${esc(t)}</li>`).join('')}
       </ul>
     </section>
 
     <section class="plan-section">
       <h3>♟ Pawn Structure & Placement</h3>
-      <p>${esc(currentPlan.pawnStructure)}</p>
+      <p>${esc(plan.pawnStructure)}</p>
     </section>
 
     <section class="plan-section">
       <h3>♞ Piece Activation</h3>
-      <p>${esc(currentPlan.pieceActivation)}</p>
+      <p>${esc(plan.pieceActivation)}</p>
     </section>
 
     <section class="plan-section">
       <h3>🎯 Typical Middlegame Plans</h3>
       <ol>
-        ${currentPlan.plans.map((p) => `<li>${esc(p)}</li>`).join('')}
+        ${plan.plans.map((p) => `<li>${esc(p)}</li>`).join('')}
       </ol>
     </section>
 
     <section class="plan-section">
       <h3>🐴 Typical Maneuvers & Ideas</h3>
       <ul>
-        ${currentPlan.typicalManeuvres.map((m) => `<li>${esc(m)}</li>`).join('')}
+        ${plan.typicalManeuvres.map((m) => `<li>${esc(m)}</li>`).join('')}
       </ul>
     </section>
 
     <section class="plan-section">
       <h3>⚡ Common Tactical Themes</h3>
       <ul>
-        ${currentPlan.commonTactics.map((t) => `<li>${esc(t)}</li>`).join('')}
+        ${plan.commonTactics.map((t) => `<li>${esc(t)}</li>`).join('')}
       </ul>
     </section>
   `;
