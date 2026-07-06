@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Middlegame Plans — PawnPrint</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#14181f" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html">♟ PawnPrint</a>
+      <div class="navlinks">
+        <a href="index.html">🏠 Home</a>
+        <a href="analyze.html">Performance Analysis</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+        <a href="middlegame.html" class="active">Middlegame Plans</a>
+        <a href="rating.html">USCF Rating</a>
+        <a href="fide-rating.html">FIDE Rating</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>📖 Middlegame Plans</h1>
+        <p class="tagline">Get detailed middlegame strategies for any opening — enter by name, variation &amp; color, or provide move order and we'll identify the opening for you.</p>
+      </header>
+
+      <section class="card" id="input-card">
+        <h2><span class="step">1</span> Find your opening</h2>
+        <div class="input-tabs">
+          <button class="tab-btn active" data-tab="by-name">By opening name</button>
+          <button class="tab-btn" data-tab="by-moves">By move order</button>
+        </div>
+
+        <div id="by-name-tab" class="tab-content active">
+          <div class="config-row">
+            <label>
+              Opening name / variation
+              <input type="text" id="opening-name" placeholder="e.g., Sicilian Dragon, Ruy Lopez Open" />
+            </label>
+            <label>
+              Play as
+              <select id="player-color">
+                <option value="w">White</option>
+                <option value="b">Black</option>
+              </select>
+            </label>
+            <button id="search-opening-btn" class="btn btn-primary">Search opening</button>
+          </div>
+          <div id="opening-suggestions" class="opening-suggestions"></div>
+        </div>
+
+        <div id="by-moves-tab" class="tab-content">
+          <div class="config-row">
+            <label>
+              Move sequence (space-separated SAN notation)
+              <textarea id="moves-input" placeholder="e.g., e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6 (Sicilian Dragon will be detected)"></textarea>
+            </label>
+            <label>
+              Play as
+              <select id="moves-player-color">
+                <option value="w">White</option>
+                <option value="b">Black</option>
+              </select>
+            </label>
+            <button id="parse-moves-btn" class="btn btn-primary">Identify opening</button>
+          </div>
+          <div id="move-parse-status" class="hint"></div>
+        </div>
+      </section>
+
+      <section class="card" id="plans-card" hidden>
+        <h2>📋 Middlegame Plans</h2>
+        <div id="opening-header" class="opening-header"></div>
+        <div id="plans-content" class="plans-content"></div>
+        <div class="export-row">
+          <button id="export-md-btn" class="btn btn-secondary">⬇ .md</button>
+          <button id="export-pdf-btn" class="btn btn-secondary">⬇ PDF</button>
+          <button id="print-btn" class="btn btn-secondary">🖨 Print</button>
+          <button id="back-btn" class="btn btn-ghost">← Back</button>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        PawnPrint · middlegame plans database · runs entirely in your browser
+      </footer>
+    </div>
+    <script type="module" src="/src/middlegame.ts"></script>
+  </body>
+</html>
