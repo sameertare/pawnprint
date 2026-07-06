@@ -33,25 +33,40 @@
             <div id="evalbar" class="evalbar"><div id="evalfill" class="evalfill"></div></div>
             <span id="evalnum" class="evalnum">0.0</span>
           </div>
-          <div class="board-controls">
-            <button id="flip-btn" class="btn">⇅ Flip</button>
-            <span id="turn-indicator" class="turn-indicator"></span>
+          <div class="nav-row" id="nav-row" hidden>
+            <button id="nav-first" class="btn nav-btn" title="First move (Home)">⏮</button>
+            <button id="nav-back" class="btn nav-btn" title="Previous move (←)">◀</button>
+            <button id="nav-fwd" class="btn nav-btn" title="Next move (→)">▶</button>
+            <button id="nav-last" class="btn nav-btn" title="Last move (End)">⏭</button>
+            <span id="ply-counter" class="hint"></span>
+            <button id="live-jump" class="btn btn-live" hidden>● LIVE</button>
+            <span class="nav-spacer"></span>
+            <button id="flip-btn" class="btn nav-btn" title="Flip board">⇅</button>
           </div>
+          <div id="turn-indicator" class="turn-indicator"></div>
+          <div id="move-assess" class="move-assess"></div>
+          <div id="move-list" class="move-list" hidden></div>
         </div>
 
         <div class="side-col">
           <!-- POSITION MODE -->
           <section class="card mode-panel" id="panel-position">
-            <h2>Analyze a position</h2>
+            <h2>Analyze a position or game</h2>
             <label class="stack">Paste a FEN (or leave the start position)
               <input type="text" id="fen-input" class="text-input" placeholder="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" />
             </label>
             <div class="btn-row">
               <button id="load-fen" class="btn">Load FEN</button>
               <button id="reset-board" class="btn btn-ghost">Start position</button>
-              <button id="undo-btn" class="btn btn-ghost">↶ Undo</button>
+              <button id="undo-btn" class="btn btn-ghost">↶ Take back</button>
             </div>
-            <p class="hint">Tip: click a piece then a destination square to play moves on the board (moves are validated).</p>
+            <label class="stack">…or paste a full game PGN to step through
+              <textarea id="pgn-input" class="text-area" rows="5" placeholder="[Event &quot;...&quot;]&#10;1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 ..."></textarea>
+            </label>
+            <div class="btn-row">
+              <button id="load-pgn" class="btn btn-primary">Load PGN &amp; navigate</button>
+            </div>
+            <p class="hint">Click a piece then a destination to play moves (validated). Step through a loaded game with the ◀ ▶ buttons or the ← → arrow keys — every move gets engine feedback.</p>
             <div class="config-row">
               <label>Engine depth
                 <select id="depth-position">
@@ -61,7 +76,7 @@
                   <option value="22">Depth 22 (slow)</option>
                 </select>
               </label>
-              <button id="suggest-btn" class="btn btn-primary">🔎 Suggest best move</button>
+              <button id="suggest-btn" class="btn btn-primary">🔎 Deep analysis (PV)</button>
               <button id="play-best-btn" class="btn" hidden>▶ Play best move</button>
             </div>
             <div id="engine-out" class="engine-out"></div>
@@ -86,9 +101,7 @@
             </div>
             <div id="live-status" class="hint"></div>
             <div id="live-players" class="live-players"></div>
-            <div id="engine-out-live" class="engine-out"></div>
-            <h3>Move feedback</h3>
-            <div id="move-feed" class="move-feed"><p class="hint">Moves and their engine assessment will appear here as the game progresses.</p></div>
+            <p class="hint">Loads the whole game (including moves before you connected) so you can step through it with ◀ ▶ and see engine feedback on every move — then keeps following new moves live. Works for finished games too.</p>
           </section>
         </div>
       </div>

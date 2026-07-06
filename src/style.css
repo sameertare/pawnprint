@@ -226,11 +226,42 @@ a { color: var(--blue); }
 .pv-line { font-family: ui-monospace, monospace; font-size: 0.9rem; color: var(--text); }
 .live-players { font-size: 1.05rem; margin: 8px 0; }
 
-.move-feed { max-height: 320px; overflow-y: auto; }
-.feed-row { display: flex; align-items: center; gap: 10px; padding: 5px 4px; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
-.feed-move { font-family: ui-monospace, monospace; min-width: 78px; }
-.feed-label { font-weight: 600; min-width: 92px; }
-.feed-best { margin-left: auto; }
+.feed-move { font-family: ui-monospace, monospace; }
+.feed-label { font-weight: 600; }
+
+/* navigation row */
+.nav-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.nav-btn { padding: 6px 12px; font-size: 1rem; line-height: 1; }
+.nav-spacer { flex: 1; }
+#ply-counter { min-width: 92px; font-variant-numeric: tabular-nums; }
+.btn-live { border-color: var(--accent-dark); }
+.btn-live.following { background: var(--red); color: #fff; border-color: var(--red); font-weight: 700; animation: livepulse 1.6s ease-in-out infinite; }
+@keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+/* current-move assessment */
+.move-assess { margin-top: 8px; min-height: 42px; display: flex; flex-direction: column; gap: 3px; }
+.assess-move { font-size: 0.95rem; }
+.assess-move .feed-move { margin-right: 6px; }
+.assess-eng { font-size: 0.95rem; }
+
+/* clickable move list */
+.move-list {
+  margin-top: 10px; max-height: 200px; overflow-y: auto; line-height: 1.9;
+  background: var(--bg-inset); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 0.92rem;
+}
+.ml-num { color: var(--text-dim); margin: 0 3px 0 8px; font-variant-numeric: tabular-nums; }
+.ml-num:first-child { margin-left: 0; }
+.ml-move {
+  font-family: ui-monospace, monospace; cursor: pointer; padding: 1px 5px; border-radius: 4px; margin: 0 1px;
+}
+.ml-move:hover { background: var(--bg-card); }
+.ml-move.cur { background: var(--accent); color: #10140c; font-weight: 700; }
+.ml-move.m-best { color: var(--accent); }
+.ml-move.m-inacc { color: var(--gold); }
+.ml-move.m-mistake { color: #e0955c; }
+.ml-move.m-blunder { color: var(--red); }
+.ml-move.cur.m-blunder, .ml-move.cur.m-mistake, .ml-move.cur.m-inacc, .ml-move.cur.m-best { color: #10140c; }
 
 /* ---------- swiss ---------- */
 .roster-preview { margin-top: 12px; }
