@@ -101,7 +101,49 @@ app.get('/api/live/:id', async (req, res) => {
   }
 });
 
-// ---- Middlegame Plans API (calls Claude API) ----
+// ---- Middlegame Plans API (calls Claude API or fallback) ----
+function generateFallbackPlans(opening, color) {
+  const isWhite = color === 'White';
+  return {
+    opening,
+    color: isWhite ? 'w' : 'b',
+    plans: [
+      isWhite ? 'Control the center and develop pieces toward active squares' : 'Create counterplay before opponent completes development',
+      isWhite ? 'Look for tactical opportunities with your developed pieces' : 'Generate threats to disrupt White\'s coordination',
+      isWhite ? 'Improve piece positioning for a dominant middlegame' : 'Activate your pieces to create concrete threats',
+      isWhite ? 'Push pawns strategically to create weaknesses' : 'Exchange defending pieces to reduce White\'s attacking potential',
+      isWhite ? 'Execute a coordinated attack on the kingside or queenside' : 'Look for tactical breaks in the center or kingside',
+    ],
+    keyThemes: [
+      'Piece coordination',
+      'Central control',
+      isWhite ? 'Kingside attack' : 'Queenside counterplay',
+      'Tactical opportunities',
+      'Positional advantage',
+    ],
+    pawnStructure: isWhite
+      ? 'Maintain a solid pawn center while preparing pawn breaks. Use your pawn majority to create attacking chances. Avoid weakening your kingside prematurely.'
+      : 'Defend passively only as a last resort. Look for pawn breaks to generate counterplay. Create a safe haven for your king while maintaining piece activity.',
+    pieceActivation: isWhite
+      ? 'Place all pieces on active squares. Centralize knights to strong outposts. Position bishops to control key diagonals. Coordinate rooks on the kingside or center.'
+      : 'Mobilize pieces quickly to create immediate threats. Knights should jump to active squares. Bishops should control long diagonals. Rooks should invade weak squares.',
+    typicalManeuvres: [
+      'Repositioning pieces for better coordination',
+      'Pawn breaks to open lines',
+      'Tactical sacrifices for initiative',
+      'Prophylactic moves to prevent threats',
+      'Creating weaknesses in opponent\'s structure',
+    ],
+    commonTactics: [
+      'Removing key defenders',
+      'Fork and pin tactics',
+      'Discovered attacks',
+      'Passed pawn creation',
+      'Back rank vulnerabilities',
+    ],
+  };
+}
+
 app.post('/api/middlegame-plans', async (req, res) => {
   const { opening, color } = req.body;
   if (!opening || typeof opening !== 'string' || !color || !['White', 'Black'].includes(color)) {
@@ -109,8 +151,10 @@ app.post('/api/middlegame-plans', async (req, res) => {
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
+
+  // Use fallback if no API key
   if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured' });
+    return res.json(generateFallbackPlans(opening, color));
   }
 
   try {
