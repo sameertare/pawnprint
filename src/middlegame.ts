@@ -1,3 +1,4 @@
+import './style.css';
 import { Chess } from 'chess.js';
 import { openingDb, findOpeningByName, findOpeningByMoves } from './openingDb';
 import type { Color } from './types';
