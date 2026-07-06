@@ -162,11 +162,13 @@ a { color: var(--blue); }
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg-card); border-bottom: 1px solid var(--border);
   padding: 10px 22px; position: sticky; top: 0; z-index: 20;
+  gap: 10px;
 }
-.topnav .brand { font-weight: 700; font-size: 1.05rem; text-decoration: none; color: var(--text); }
-.navlinks { display: flex; gap: 6px; flex-wrap: wrap; }
+.topnav .brand { font-weight: 700; font-size: 1.05rem; text-decoration: none; color: var(--text); flex-shrink: 0; }
+.navlinks { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .navlinks a {
   color: var(--text-dim); text-decoration: none; padding: 6px 12px; border-radius: 8px; font-size: 0.9rem;
+  white-space: nowrap; flex-shrink: 0;
 }
 .navlinks a:hover { background: var(--bg-inset); color: var(--text); }
 .navlinks a.active { background: var(--accent); color: #10140c; font-weight: 600; }
@@ -293,6 +295,15 @@ a { color: var(--blue); }
 #print-area { display: none; }
 .roster-preview { margin-top: 12px; }
 .chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.roster-table-wrap {
+  margin-top: 8px; max-height: 360px; overflow-y: auto; overflow-x: auto;
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.roster-table { width: 100%; border-collapse: collapse; margin: 0; }
+.roster-table thead th {
+  position: sticky; top: 0; background: var(--bg-inset); z-index: 1;
+}
+.roster-table td, .roster-table th { padding: 6px 12px; white-space: nowrap; }
 .round-block { margin-bottom: 20px; }
 .round-block h3 { margin: 4px 0 6px; }
 .result-sel { min-width: 150px; padding: 5px 8px; }

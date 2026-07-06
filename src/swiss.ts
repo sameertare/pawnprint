@@ -168,11 +168,26 @@ function previewRoster() {
         <button id="switch-format-btn" class="btn btn-primary" data-fmt="${suggestion.format}">Switch to ${FORMAT_LABEL[suggestion.format]} →</button></div>`
     : '';
 
+  const showSection = secs.length > 1;
+  const rows = roster
+    .map(
+      (p, i) => `<tr>
+        <td class="num">${i + 1}</td>
+        <td>${esc(p.name)}</td>
+        <td class="num">${p.rating ?? '<span class="hint">unrated</span>'}</td>
+        <td class="num">${p.byeRounds && p.byeRounds.length ? `R${p.byeRounds.join(', R')}` : '—'}</td>
+        ${showSection ? `<td>${esc(p.section ?? '—')}</td>` : ''}
+      </tr>`
+    )
+    .join('');
+
   prev.innerHTML =
     warning +
     note +
     `<p class="hint">Previewing ${roster.length} players${secs.length > 1 ? '' : ` · recommended rounds: <b>${rr}</b>`}${unrated ? ` · ${unrated} unrated` : ''}${withByes ? ` · ${withByes} with a requested bye` : ''}</p>` +
-    `<div class="chip-list">${roster.map((p) => `<span class="chip">${esc(p.name)}${p.rating ? ` <b>${p.rating}</b>` : ' <span class="hint">unrated</span>'}${p.byeRounds && p.byeRounds.length ? ` <span class="hint">(bye R${p.byeRounds.join(',')})</span>` : ''}</span>`).join('')}</div>`;
+    `<div class="roster-table-wrap"><table class="roster-table"><thead><tr>
+        <th class="num">#</th><th>Name</th><th class="num">Rating</th><th class="num">Bye</th>${showSection ? '<th>Section</th>' : ''}
+      </tr></thead><tbody>${rows}</tbody></table></div>`;
 
   $('#switch-format-btn')?.addEventListener('click', () => {
     const btn = $('#switch-format-btn') as HTMLButtonElement;
