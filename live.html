@@ -46,8 +46,12 @@
             <span class="nav-spacer"></span>
             <button id="flip-btn" class="btn nav-btn" title="Flip board">⇅</button>
           </div>
-          <div id="turn-indicator" class="turn-indicator"></div>
+          <div class="turn-row">
+            <div id="turn-indicator" class="turn-indicator"></div>
+            <div id="opening-name" class="opening-name"></div>
+          </div>
           <div id="move-assess" class="move-assess"></div>
+          <div id="candidates" class="candidates-panel"></div>
           <div id="move-list" class="move-list" hidden></div>
         </div>
 
@@ -69,7 +73,7 @@
             <div class="btn-row">
               <button id="load-pgn" class="btn btn-primary">Load PGN &amp; navigate</button>
             </div>
-            <p class="hint">Click a piece then a destination to play moves (validated). Step through a loaded game with the ◀ ▶ buttons or the ← → arrow keys — every move gets engine feedback.</p>
+            <p class="hint">Click a piece then a destination to play moves (validated). Step through a loaded game with the ◀ ▶ buttons or the ← → arrow keys — every move gets engine feedback, plus the top 3 candidate moves for the position on screen.</p>
             <div class="config-row">
               <label>Engine depth
                 <select id="depth-position">
@@ -87,9 +91,9 @@
 
           <!-- LIVE MODE -->
           <section class="card mode-panel" id="panel-live" hidden>
-            <h2>Watch a live lichess game</h2>
-            <label class="stack">Lichess game URL or ID
-              <input type="text" id="game-input" class="text-input" placeholder="https://lichess.org/abcd1234  or  abcd1234" />
+            <h2>Watch a live game, study, or position</h2>
+            <label class="stack">Lichess game URL/ID, study link, analysis link, or a FEN
+              <input type="text" id="game-input" class="text-input" placeholder="https://lichess.org/abcd1234, /study/xxxxxxxx, /analysis/…, or a FEN" />
             </label>
             <div class="config-row">
               <label>Feedback depth
@@ -102,6 +106,7 @@
               <button id="connect-btn" class="btn btn-primary">📡 Connect</button>
               <button id="disconnect-btn" class="btn btn-ghost" hidden>Disconnect</button>
             </div>
+            <p class="hint">Studies and analysis/FEN links load as a static, navigable position (click pieces or use ◀ ▶) — only a game URL/ID streams live.</p>
             <div id="live-status" class="hint"></div>
             <div id="live-players" class="live-players"></div>
             <p class="hint">Loads the whole game (including moves before you connected) so you can step through it with ◀ ▶ and see engine feedback on every move — then keeps following new moves live. Works for finished games too.</p>

@@ -7,6 +7,18 @@ const GLYPHS: Record<string, string> = {
 
 export type Square = string; // 'e4'
 
+export interface RankedArrow {
+  from: Square;
+  to: Square;
+  rank: 1 | 2 | 3; // 1 = best move (thickest/brightest), higher ranks progressively thinner/dimmer
+}
+
+const ARROW_STYLE: Record<1 | 2 | 3, { color: string; width: number; opacity: number }> = {
+  1: { color: 'var(--accent)', width: 0.16, opacity: 0.9 },
+  2: { color: 'var(--gold)', width: 0.11, opacity: 0.75 },
+  3: { color: 'var(--blue)', width: 0.08, opacity: 0.65 },
+};
+
 export class Board {
   private root: HTMLElement;
   private orientation: 'w' | 'b' = 'w';
@@ -14,7 +26,7 @@ export class Board {
   private selected: Square | null = null;
   private highlights = new Set<Square>();
   private lastMove: [Square, Square] | null = null;
-  private arrow: [Square, Square] | null = null;
+  private arrows: RankedArrow[] = [];
   onSquareClick?: (sq: Square) => void;
 
   constructor(root: HTMLElement) {
@@ -32,7 +44,10 @@ export class Board {
   setSelected(sq: Square | null) { this.selected = sq; this.render(); }
   setHighlights(sqs: Square[]) { this.highlights = new Set(sqs); this.render(); }
   setLastMove(m: [Square, Square] | null) { this.lastMove = m; this.render(); }
-  setArrow(m: [Square, Square] | null) { this.arrow = m; this.render(); }
+  /** Single best-move arrow (rank 1). Convenience wrapper over setArrows. */
+  setArrow(m: [Square, Square] | null) { this.arrows = m ? [{ from: m[0], to: m[1], rank: 1 }] : []; this.render(); }
+  /** Up to a few ranked candidate-move arrows, rendered thickest/brightest for rank 1. */
+  setArrows(arrows: RankedArrow[]) { this.arrows = arrows; this.render(); }
 
   private files(): string[] {
     const f = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -90,14 +105,23 @@ export class Board {
     }
     html += '</div>';
 
-    if (this.arrow) {
-      const a = this.centerPct(this.arrow[0]);
-      const b = this.centerPct(this.arrow[1]);
-      html += `<svg class="board-arrows" viewBox="0 0 8 8" preserveAspectRatio="none">
-        <defs><marker id="ah" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto">
-          <path d="M0,0 L4,2 L0,4 z" fill="var(--accent)"/></marker></defs>
-        <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--accent)" stroke-width="0.16"
-          stroke-linecap="round" opacity="0.85" marker-end="url(#ah)"/></svg>`;
+    if (this.arrows.length) {
+      const defs = ([1, 2, 3] as const)
+        .map((r) => `<marker id="ah${r}" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto">
+          <path d="M0,0 L4,2 L0,4 z" fill="${ARROW_STYLE[r].color}"/></marker>`)
+        .join('');
+      // Draw lowest rank first so the best-move arrow (rank 1) ends up on top.
+      const lines = [...this.arrows]
+        .sort((x, y) => y.rank - x.rank)
+        .map((ar) => {
+          const a = this.centerPct(ar.from);
+          const b = this.centerPct(ar.to);
+          const s = ARROW_STYLE[ar.rank];
+          return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${s.color}" stroke-width="${s.width}"
+            stroke-linecap="round" opacity="${s.opacity}" marker-end="url(#ah${ar.rank})"/>`;
+        })
+        .join('');
+      html += `<svg class="board-arrows" viewBox="0 0 8 8" preserveAspectRatio="none"><defs>${defs}</defs>${lines}</svg>`;
     }
     this.root.innerHTML = html;
 

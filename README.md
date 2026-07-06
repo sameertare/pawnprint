@@ -136,14 +136,17 @@ Two modes, one board (Stockfish 18 runs locally in the browser):
 - Paste a FEN or click pieces to play moves on the board (moves are validated by chess.js).
 - **Suggest best move** runs Stockfish 18 to your chosen depth and shows the best move (as an arrow + SAN), the evaluation, the eval bar, and the full principal variation.
 - **Play best move** applies it so you can walk a line forward; **Undo** / **Start position** to reset.
+- The **opening name** (book lookup, no PGN headers needed) is shown once the moves played match a known line, and keeps updating as you navigate.
 
-**Live lichess game**
-- Paste a lichess game URL or 8-character ID and **Connect**.
-- The board follows the game move-by-move in real time.
-- Every move gets **feedback** — Best / OK / Inaccuracy ?! / Mistake ? / Blunder ?? — based on the win-probability swing, with the engine's better move shown when relevant.
-- The engine's suggested move for the side to move is always displayed and drawn as an arrow.
+**Live lichess game / study / position**
+- Paste a lichess **game** URL or 8-character ID and **Connect** — the board follows the game move-by-move in real time (feedback begins from the position at the moment you connect; the stream doesn't replay earlier moves).
+- Paste a lichess **study** link (with or without a chapter) to load that chapter as a static, navigable game — click pieces or step with ◀ ▶, same as Any Position. A study with multiple chapters loads chapter 1, with a note to paste a direct chapter link for another.
+- Paste a lichess **analysis-board** link (with an embedded FEN) or just a bare **FEN** to load that single position.
+- Every move gets **feedback** — Best / OK / Inaccuracy ?! / Mistake ? / Blunder ?? — based on the win-probability swing, with the engine's better move shown when relevant. The **● LIVE** badge (and jump-back-to-live button) only appears for an actual live game, not a study/position load.
 
-How the live board works: the browser streams `GET https://lichess.org/api/stream/game/{id}` directly from the lichess public API (NDJSON, CORS-allowed) — no backend required, which is what lets the Live tool work on a static host like GitHub Pages. Feedback begins from the position at the moment you connect (the stream doesn't replay earlier moves). The bundled Node backend also exposes an equivalent `/api/live/:id` Server-Sent-Events relay for environments that prefer to proxy, but the frontend doesn't need it.
+**Top candidate moves (both modes)** — the currently viewed position always shows the top 3 engine moves (Stockfish's MultiPV), each with its evaluation and a short continuation, drawn on the board as three ranked arrows (green/gold/blue, thickest and brightest for the best move) — useful for seeing what else was worth considering, not just the single best line.
+
+How the live board works: the browser streams `GET https://lichess.org/api/stream/game/{id}` (games) or `GET https://lichess.org/study/{id}[/{chapterId}].pgn` (studies) directly from the lichess public API (CORS-allowed) — no backend required, which is what lets the Live tool work on a static host like GitHub Pages. The bundled Node backend also exposes an equivalent `/api/live/:id` Server-Sent-Events relay for environments that prefer to proxy, but the frontend doesn't need it.
 
 ---
 

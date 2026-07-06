@@ -232,7 +232,9 @@ a { color: var(--blue); }
 .evalbar { display: flex; }
 .evalnum { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 46px; text-align: right; }
 .board-controls { display: flex; align-items: center; gap: 12px; }
+.turn-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .turn-indicator { color: var(--text-dim); font-size: 0.9rem; }
+.opening-name { color: var(--text-dim); font-size: 0.85rem; font-style: italic; text-align: right; }
 
 .engine-out { margin-top: 12px; min-height: 20px; }
 .best-move { font-size: 1.05rem; margin-bottom: 6px; }
@@ -257,6 +259,22 @@ a { color: var(--blue); }
 .assess-move { font-size: 0.95rem; }
 .assess-move .feed-move { margin-right: 6px; }
 .assess-eng { font-size: 0.95rem; }
+
+/* multi-PV candidate moves */
+.candidates-panel { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.cand-row {
+  display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 7px;
+  background: var(--bg-inset); border: 1px solid var(--border); font-size: 0.9rem;
+}
+.cand-num {
+  display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  border-radius: 50%; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; color: #10140c;
+}
+.cand-rank1 .cand-num { background: var(--accent); }
+.cand-rank2 .cand-num { background: var(--gold); }
+.cand-rank3 .cand-num { background: var(--blue); }
+.cand-move { font-family: ui-monospace, monospace; font-weight: 600; min-width: 46px; }
+.cand-cont { font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* clickable move list */
 .move-list {

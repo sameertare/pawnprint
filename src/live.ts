@@ -2,7 +2,10 @@ import './style.css';
 import { Chess } from 'chess.js';
 import { Board } from './board';
 import { Engine, ENGINE_NAME } from './engine';
+import type { EngineEval } from './engine';
 import { winPct } from './analyze';
+import { identifyOpening } from './openings';
+import { splitPgn } from './pgn';
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -65,6 +68,12 @@ function pvToSans(fen: string, pv: string[], max = 6): string[] {
   }
   return out;
 }
+/** Opening name from the moves played so far (book lookup only — no PGN headers available here). */
+function openingNameFor(sansSoFar: string[]): string | null {
+  if (sansSoFar.length === 0) return null;
+  const { opening } = identifyOpening({}, sansSoFar);
+  return opening === 'Unknown Opening' ? null : opening;
+}
 function classify(drop: number): { label: string; cls: string } {
   if (drop >= 30) return { label: 'Blunder ??', cls: 'neg' };
   if (drop >= 20) return { label: 'Mistake ?', cls: 'neg' };
@@ -106,22 +115,27 @@ function truncateAfter(i: number) {
   line.length = i + 1; evalsW.length = i + 1; bestU.length = i + 1; mateN.length = i + 1;
 }
 
+interface BuiltLine { line: Node[]; white?: string; black?: string; wr?: string; br?: string; event?: string; }
+
 /** Build a full line from a PGN string. Returns null if it can't be parsed. */
-function buildLineFromPgn(pgn: string): { line: Node[]; white?: string; black?: string; wr?: string; br?: string } | null {
+function buildLineFromPgn(pgn: string): BuiltLine | null {
   const c = new Chess();
   try { c.loadPgn(pgn); } catch { return null; }
   const verbose = c.history({ verbose: true }) as any[];
   const h = c.header() as Record<string, string | null | undefined>;
-  const s = (v: string | null | undefined) => v ?? undefined;
+  // chess.js defaults missing Seven Tag Roster headers to the literal string "?" — treat that
+  // the same as absent (studies in particular have no White/Black headers at all).
+  const s = (v: string | null | undefined) => (v && v !== '?' ? v : undefined);
+  const meta = { wr: s(h.WhiteElo), br: s(h.BlackElo), event: s(h.Event) };
   if (!verbose.length) {
     // PGN with only a FEN header and no moves — navigate the single position.
-    return { line: [{ fen: c.fen(), lm: null, san: null }], white: s(h.White), black: s(h.Black), wr: s(h.WhiteElo), br: s(h.BlackElo) };
+    return { line: [{ fen: c.fen(), lm: null, san: null }], white: s(h.White), black: s(h.Black), ...meta };
   }
   const nodes: Node[] = [{ fen: verbose[0].before, lm: null, san: null }];
   for (const mv of verbose) {
     nodes.push({ fen: mv.after, lm: mv.from + mv.to + (mv.promotion || ''), san: mv.san });
   }
-  return { line: nodes, white: s(h.White), black: s(h.Black), wr: s(h.WhiteElo), br: s(h.BlackElo) };
+  return { line: nodes, white: s(h.White), black: s(h.Black), ...meta };
 }
 
 /** Per-move assessment (needs evals for k-1 and k). */
@@ -170,9 +184,13 @@ function render() {
   if (evalsW[view] != null) setEvalBar(evalsW[view]!);
   else evalNum.textContent = '…';
 
+  const sansSoFar = line.slice(1, view + 1).map((n) => n.san ?? '').filter(Boolean);
+  $('#opening-name').textContent = openingNameFor(sansSoFar) ?? '';
+
   renderAssess(c, fen);
   renderMoveList();
   updateNav();
+  void updateCandidates();
 }
 
 function renderAssess(c: Chess, fen: string) {
@@ -246,8 +264,8 @@ function updateNav() {
   ($('#nav-last') as HTMLButtonElement).disabled = view >= n - 1;
   $('#ply-counter').textContent = n > 1 ? `Move ${view} / ${n - 1}` : '';
   const lj = $('#live-jump') as HTMLElement;
-  lj.hidden = mode !== 'live';
-  if (mode === 'live') {
+  lj.hidden = mode !== 'live' || connKind !== 'game';
+  if (mode === 'live' && connKind === 'game') {
     if (liveFollow) { lj.textContent = '● LIVE'; lj.classList.add('following'); }
     else { lj.textContent = `⏭ Live (${n - 1 - view} behind)`; lj.classList.remove('following'); }
   }
@@ -299,11 +317,54 @@ async function pump() {
   }
 }
 
+// ---------- multi-PV candidate moves for the currently viewed position ----------
+const NUM_CANDIDATES = 3;
+let candidatesToken = 0;
+
+function renderCandidates(fen: string, results: EngineEval[]) {
+  const panel = $('#candidates');
+  if (!results.length) { panel.innerHTML = ''; board.setArrows([]); return; }
+  const stmWhite = fen.split(' ')[1] === 'w';
+  const arrows = results.slice(0, NUM_CANDIDATES).map((r, i) => {
+    const uci = r.bestmove;
+    return uci ? { from: uci.slice(0, 2), to: uci.slice(2, 4), rank: (i + 1) as 1 | 2 | 3 } : null;
+  }).filter((a): a is { from: string; to: string; rank: 1 | 2 | 3 } => a !== null);
+  board.setArrows(arrows);
+
+  const rows = results.slice(0, NUM_CANDIDATES).map((r, i) => {
+    const san = r.bestmove ? uciToSan(fen, r.bestmove) ?? r.bestmove : '—';
+    const whiteEval = stmWhite ? r.cp : -r.cp;
+    const evalStr = fmtEval(whiteEval, r.mateIn, stmWhite);
+    const contPv = r.bestmove ? pvToSans(fen, r.pv, 4).slice(1).join(' ') : '';
+    return `<div class="cand-row cand-rank${i + 1}">
+      <span class="cand-num">${i + 1}</span>
+      <span class="cand-move">${san}</span>
+      <span class="eval-chip">${evalStr}</span>
+      ${contPv ? `<span class="hint cand-cont">${contPv}</span>` : ''}
+    </div>`;
+  });
+  panel.innerHTML = rows.join('');
+}
+
+async function updateCandidates() {
+  const token = ++candidatesToken;
+  const fen = line[view].fen;
+  const c = new Chess(fen);
+  if (c.isGameOver()) { $('#candidates').innerHTML = ''; return; }
+  const eng = await getEngine();
+  const results = await eng.evaluateMultiPv(fen, curDepth(), NUM_CANDIDATES);
+  if (token !== candidatesToken) return; // superseded by a newer navigation
+  if (line[view]?.fen !== fen) return; // view moved on while we were searching
+  renderCandidates(fen, results);
+}
+
 // ======================================================================
 // POSITION TAB — FEN / PGN / click-to-move
 // ======================================================================
 board.onSquareClick = (sq) => {
-  if (mode !== 'position') return;
+  // Click-to-move works in the Position tab, and also on a static (study/FEN) load in the Live
+  // tab — but not while genuinely following a live game, where the board reflects real moves.
+  if (mode !== 'position' && connKind !== 'static') return;
   const fen = line[view].fen;
   const c = new Chess(fen);
   const piece = c.get(sq as any);
@@ -415,16 +476,40 @@ $('#play-best-btn').addEventListener('click', () => {
 // ======================================================================
 let liveAbort: AbortController | null = null;
 let pgnLoaded = false;
+let connKind: 'game' | 'static' = 'game'; // 'static' = study/analysis position — no live stream to follow
 
-function parseGameId(input: string): string | null {
-  const s = input.trim();
-  const m = s.match(/lichess\.org\/([a-zA-Z0-9]{8,12})/);
-  const id = m ? m[1] : s;
-  return /^[a-zA-Z0-9]{8,12}$/.test(id) ? id.slice(0, 8) : null;
+type LichessInput =
+  | { kind: 'game'; id: string }
+  | { kind: 'study'; studyId: string; chapterId?: string }
+  | { kind: 'fen'; fen: string };
+
+/** Recognise a lichess game URL/ID, a study URL (with or without a chapter), an analysis-board
+ *  URL with an embedded FEN, or a bare pasted FEN. */
+function classifyLichessInput(raw: string): LichessInput | null {
+  const s = raw.trim();
+
+  const study = s.match(/lichess\.org\/study\/([a-zA-Z0-9]{8})(?:\/([a-zA-Z0-9]{8}))?/);
+  if (study) return { kind: 'study', studyId: study[1], chapterId: study[2] };
+
+  const analysisFen = s.match(
+    /lichess\.org\/analysis(?:\/\w+)?\/([1-8pnbrqkPNBRQK]+(?:\/[1-8pnbrqkPNBRQK]+){7}_[wb]_[\w-]+_[\w-]+_\d+_\d+)/
+  );
+  if (analysisFen) return { kind: 'fen', fen: analysisFen[1].replace(/_/g, ' ') };
+
+  // A bare FEN pasted directly (not a URL at all).
+  if (/^[1-8pnbrqkPNBRQK/]+\s+[wb]\s+[\w-]+\s+\S+\s+\d+\s+\d+$/.test(s)) return { kind: 'fen', fen: s };
+
+  const game = s.match(/lichess\.org\/([a-zA-Z0-9]{8,12})(?:[/?#]|$)/);
+  const id = game ? game[1] : s;
+  if (/^[a-zA-Z0-9]{8,12}$/.test(id)) return { kind: 'game', id: id.slice(0, 8) };
+  return null;
 }
 
-function setPlayers(white?: string, black?: string, wr?: string, br?: string) {
-  if (!white && !black) return;
+function setPlayers(white?: string, black?: string, wr?: string, br?: string, fallbackLabel?: string) {
+  if (!white && !black) {
+    if (fallbackLabel) $('#live-players').innerHTML = `<b>${fallbackLabel}</b>`;
+    return;
+  }
   const w = white || 'White', b = black || 'Black';
   $('#live-players').innerHTML = `<b>${w}</b>${wr ? ` (${wr})` : ''} &nbsp;vs&nbsp; <b>${b}</b>${br ? ` (${br})` : ''}`;
 }
@@ -487,6 +572,7 @@ async function streamLichessGame(id: string, signal: AbortSignal, status: HTMLEl
 
 async function connectLive(id: string) {
   disconnect();
+  connKind = 'game';
   liveAbort = new AbortController();
   const signal = liveAbort.signal;
   resetLine(START);
@@ -520,13 +606,76 @@ async function connectLive(id: string) {
   void streamLichessGame(id, signal, status);
 }
 
-$('#connect-btn').addEventListener('click', () => {
-  const id = parseGameId(($('#game-input') as HTMLInputElement).value);
+/** Load a lichess study chapter (or the first chapter of a whole study) as a static, navigable game. */
+async function connectStudy(studyId: string, chapterId?: string) {
+  disconnect();
+  connKind = 'static';
   const status = $('#live-status');
-  if (!id) { status.innerHTML = `<span class="neg">Enter a valid lichess game URL or 8-character ID.</span>`; return; }
+  $('#live-players').innerHTML = '';
+  status.innerHTML = `Loading study <code>${studyId}</code>…`;
+  const url = chapterId
+    ? `https://lichess.org/study/${studyId}/${chapterId}.pgn`
+    : `https://lichess.org/study/${studyId}.pgn`;
+  try {
+    const r = await fetch(url, { headers: { Accept: 'application/x-chess-pgn' } });
+    if (!r.ok) {
+      status.innerHTML = `<span class="neg">Lichess returned ${r.status} — study not found or not public.</span>`;
+      return;
+    }
+    const text = await r.text();
+    const chunks = splitPgn(text);
+    if (!chunks.length) {
+      status.innerHTML = `<span class="neg">That study has no chapters to load.</span>`;
+      return;
+    }
+    const built = buildLineFromPgn(chunks[0]);
+    if (!built || built.line.length === 0) {
+      status.innerHTML = `<span class="neg">Could not read that study chapter.</span>`;
+      return;
+    }
+    line = built.line;
+    evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
+    view = 0;
+    setPlayers(built.white, built.black, built.wr, built.br, built.event);
+    const more = chunks.length > 1 ? ` (chapter 1 of ${chunks.length} — paste a direct chapter link for another)` : '';
+    status.innerHTML = `Loaded study chapter${more}. Use ◀ ▶ to step through.`;
+    render();
+    void pump();
+  } catch {
+    status.innerHTML = `<span class="neg">Could not reach lichess.</span>`;
+  }
+}
+
+/** Load a single position from a pasted FEN or a lichess analysis-board link. */
+function connectFen(fen: string) {
+  disconnect();
+  connKind = 'static';
+  const status = $('#live-status');
+  $('#live-players').innerHTML = '';
+  try {
+    new Chess(fen); // validate
+  } catch {
+    status.innerHTML = `<span class="neg">Couldn't read a position from that link — try pasting the FEN directly.</span>`;
+    return;
+  }
+  resetLine(fen);
+  status.innerHTML = `Loaded position. Use ◀ ▶ or click pieces to explore.`;
+  render();
+  void pump();
+}
+
+$('#connect-btn').addEventListener('click', () => {
+  const parsed = classifyLichessInput(($('#game-input') as HTMLInputElement).value);
+  const status = $('#live-status');
+  if (!parsed) {
+    status.innerHTML = `<span class="neg">Enter a lichess game URL/ID, a study link, an analysis-board link, or a FEN.</span>`;
+    return;
+  }
   ($('#connect-btn') as HTMLElement).hidden = true;
   ($('#disconnect-btn') as HTMLElement).hidden = false;
-  void connectLive(id);
+  if (parsed.kind === 'game') void connectLive(parsed.id);
+  else if (parsed.kind === 'study') void connectStudy(parsed.studyId, parsed.chapterId);
+  else connectFen(parsed.fen);
 });
 
 function disconnect() {
