@@ -6,6 +6,7 @@ import express from 'express';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { openingDatabase, findOpening } from './openings.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -101,146 +102,37 @@ app.get('/api/live/:id', async (req, res) => {
   }
 });
 
-// ---- Middlegame Plans API (calls Claude API or fallback) ----
-function generateFallbackPlans(opening, color) {
-  const isWhite = color === 'White';
-  return {
-    opening,
-    color: isWhite ? 'w' : 'b',
-    plans: [
-      isWhite ? 'Control the center and develop pieces toward active squares' : 'Create counterplay before opponent completes development',
-      isWhite ? 'Look for tactical opportunities with your developed pieces' : 'Generate threats to disrupt White\'s coordination',
-      isWhite ? 'Improve piece positioning for a dominant middlegame' : 'Activate your pieces to create concrete threats',
-      isWhite ? 'Push pawns strategically to create weaknesses' : 'Exchange defending pieces to reduce White\'s attacking potential',
-      isWhite ? 'Execute a coordinated attack on the kingside or queenside' : 'Look for tactical breaks in the center or kingside',
-    ],
-    keyThemes: [
-      'Piece coordination',
-      'Central control',
-      isWhite ? 'Kingside attack' : 'Queenside counterplay',
-      'Tactical opportunities',
-      'Positional advantage',
-    ],
-    pawnStructure: isWhite
-      ? 'Maintain a solid pawn center while preparing pawn breaks. Use your pawn majority to create attacking chances. Avoid weakening your kingside prematurely.'
-      : 'Defend passively only as a last resort. Look for pawn breaks to generate counterplay. Create a safe haven for your king while maintaining piece activity.',
-    pieceActivation: isWhite
-      ? 'Place all pieces on active squares. Centralize knights to strong outposts. Position bishops to control key diagonals. Coordinate rooks on the kingside or center.'
-      : 'Mobilize pieces quickly to create immediate threats. Knights should jump to active squares. Bishops should control long diagonals. Rooks should invade weak squares.',
-    typicalManeuvres: [
-      'Repositioning pieces for better coordination',
-      'Pawn breaks to open lines',
-      'Tactical sacrifices for initiative',
-      'Prophylactic moves to prevent threats',
-      'Creating weaknesses in opponent\'s structure',
-    ],
-    commonTactics: [
-      'Removing key defenders',
-      'Fork and pin tactics',
-      'Discovered attacks',
-      'Passed pawn creation',
-      'Back rank vulnerabilities',
-    ],
-  };
-}
-
+// ---- Middlegame Plans API (uses local opening database) ----
 app.post('/api/middlegame-plans', async (req, res) => {
   const { opening, color } = req.body;
   if (!opening || typeof opening !== 'string' || !color || !['White', 'Black'].includes(color)) {
     return res.status(400).json({ error: 'Invalid opening or color' });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  // Use fallback if no API key
-  if (!apiKey) {
-    return res.json(generateFallbackPlans(opening, color));
-  }
-
-  try {
-    const prompt = `You are a chess expert providing middlegame strategy guidance.
-
-The user is asking for middlegame plans for: ${opening}
-Playing as: ${color}
-
-Provide a comprehensive middlegame strategy response in the following JSON format (and ONLY this format):
-{
-  "opening": "${opening}",
-  "color": "${color === 'White' ? 'w' : 'b'}",
-  "plans": [
-    "Plan 1 detailed description",
-    "Plan 2 detailed description",
-    "Plan 3 detailed description",
-    "Plan 4 detailed description",
-    "Plan 5 detailed description"
-  ],
-  "keyThemes": [
-    "Theme 1",
-    "Theme 2",
-    "Theme 3",
-    "Theme 4",
-    "Theme 5"
-  ],
-  "pawnStructure": "Detailed explanation of typical pawn structure for this opening as ${color}",
-  "pieceActivation": "Detailed explanation of how to activate pieces in this opening",
-  "typicalManeuvres": [
-    "Maneuver 1",
-    "Maneuver 2",
-    "Maneuver 3",
-    "Maneuver 4",
-    "Maneuver 5"
-  ],
-  "commonTactics": [
-    "Tactic 1",
-    "Tactic 2",
-    "Tactic 3",
-    "Tactic 4",
-    "Tactic 5"
-  ]
-}
-
-Ensure all fields are present and contain detailed, practical chess advice specific to ${opening} when playing as ${color}. The response must be valid JSON with no additional text.`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+  const result = findOpening(opening);
+  if (!result) {
+    return res.status(400).json({
+      error: 'Opening not found in database. Try: Sicilian Defense, Ruy Lopez, French Defense, Caro-Kann Defense, Italian Game, King\'s Indian Defense, or Queen\'s Gambit Declined.'
     });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Claude API error:', error);
-      return res.status(500).json({ error: 'Failed to generate plans' });
-    }
-
-    const data = await response.json();
-    const content = data.content[0]?.text;
-
-    if (!content) {
-      return res.status(500).json({ error: 'No content from API' });
-    }
-
-    // Extract JSON from response (in case there's extra text)
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error('Could not parse JSON from response:', content);
-      return res.status(500).json({ error: 'Invalid response format' });
-    }
-
-    const plans = JSON.parse(jsonMatch[0]);
-    res.json(plans);
-  } catch (e) {
-    console.error('Error generating middlegame plans:', e);
-    res.status(500).json({ error: String(e) });
   }
+
+  const { name, data } = result;
+  const colorPlans = data[color];
+
+  if (!colorPlans) {
+    return res.status(400).json({ error: 'Invalid color' });
+  }
+
+  res.json({
+    opening: name,
+    color: color === 'White' ? 'w' : 'b',
+    plans: colorPlans.plans,
+    keyThemes: colorPlans.keyThemes,
+    pawnStructure: colorPlans.pawnStructure,
+    pieceActivation: colorPlans.pieceActivation,
+    typicalManeuvres: colorPlans.typicalManeuvres,
+    commonTactics: colorPlans.commonTactics,
+  });
 });
 
 app.use(express.static(DIST)); // includes the sample PGNs (bundled from public/)
