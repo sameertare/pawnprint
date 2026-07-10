@@ -6,7 +6,6 @@ import express from 'express';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openingDatabase, findOpening } from './openings.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -100,39 +99,6 @@ app.get('/api/live/:id', async (req, res) => {
       try { send({ __meta: 'error', message: String(e && e.message ? e.message : e) }); res.end(); } catch { /* client gone */ }
     }
   }
-});
-
-// ---- Middlegame Plans API (uses local opening database) ----
-app.post('/api/middlegame-plans', async (req, res) => {
-  const { opening, color } = req.body;
-  if (!opening || typeof opening !== 'string' || !color || !['White', 'Black'].includes(color)) {
-    return res.status(400).json({ error: 'Invalid opening or color' });
-  }
-
-  const result = findOpening(opening);
-  if (!result) {
-    return res.status(400).json({
-      error: 'Opening not found in database. Try: Sicilian Defense, Ruy Lopez, French Defense, Caro-Kann Defense, Italian Game, King\'s Indian Defense, or Queen\'s Gambit Declined.'
-    });
-  }
-
-  const { name, data } = result;
-  const colorPlans = data[color];
-
-  if (!colorPlans) {
-    return res.status(400).json({ error: 'Invalid color' });
-  }
-
-  res.json({
-    opening: name,
-    color: color === 'White' ? 'w' : 'b',
-    plans: colorPlans.plans,
-    keyThemes: colorPlans.keyThemes,
-    pawnStructure: colorPlans.pawnStructure,
-    pieceActivation: colorPlans.pieceActivation,
-    typicalManeuvres: colorPlans.typicalManeuvres,
-    commonTactics: colorPlans.commonTactics,
-  });
 });
 
 app.use(express.static(DIST)); // includes the sample PGNs (bundled from public/)
