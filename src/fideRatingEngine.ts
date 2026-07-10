@@ -1,12 +1,18 @@
 /**
  * FIDE (Standard) rating estimator — an unofficial approximation of the published FIDE rating
- * formula (FIDE Handbook B.02): win expectancy on the logistic curve with the 400-point cap, and
- * a K-factor that's a flat tier lookup by rating (rather than USCF's dynamic N+games formula).
- * FIDE's Standard rating has no bonus-points provision.
+ * formula (FIDE Handbook B.02, effective 1 March 2024, incl. the 1 Oct 2025 amendment): win
+ * expectancy on the logistic curve, and a K-factor that's a flat tier lookup by rating (rather
+ * than USCF's dynamic N+games formula). FIDE's Standard rating has no bonus-points provision.
+ * FIDE officially scores expected value via a lookup table rather than the closed-form logistic
+ * curve, but the two are numerically close; this uses the closed form for simplicity.
+ *
+ * The ±400 rating-difference cap (per the 1 Oct 2025 amendment) only applies for players rated
+ * below 2650 — 2650+ uses the actual difference uncapped.
  *
  * Simplified to rating-only K-factor tiers (no prior-games or age input): this assumes an
  * established player. FIDE also uses K=40 for a player's first 30 rated games regardless of
- * rating, which isn't modeled here since that requires knowing the games-played count.
+ * rating, and K=40 for players under 18 rated below 2300, neither of which is modeled here since
+ * that requires knowing games-played count and birth date.
  */
 
 export interface FideEstimateInput {
@@ -34,6 +40,7 @@ const MIN_RATING = 100;
 const MAX_RATING = 3000;
 const HIGH_RATING_THRESHOLD = 2400;
 const RATING_DIFF_CAP = 400;
+const RATING_DIFF_CAP_EXEMPT_AT = 2650; // players rated 2650+ are not subject to the 400-point cap
 const FIDE_PUBLISH_FLOOR = 1400;
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -41,8 +48,9 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 function winExpectancy(playerRating: number, opponentRating: number): number {
-  const diff = clamp(playerRating - opponentRating, -RATING_DIFF_CAP, RATING_DIFF_CAP);
-  return 1 / (1 + Math.pow(10, -diff / 400));
+  const diff = playerRating - opponentRating;
+  const capped = playerRating >= RATING_DIFF_CAP_EXEMPT_AT ? diff : clamp(diff, -RATING_DIFF_CAP, RATING_DIFF_CAP);
+  return 1 / (1 + Math.pow(10, -capped / 400));
 }
 
 function kFactorFor(currentRating: number): { k: number; label: string } {
@@ -74,7 +82,8 @@ export function estimateFideRating(input: FideEstimateInput): FideEstimateOutcom
   }
 
   const notes: string[] = [
-    'Assumes an established rating. FIDE uses K=40 for a player\'s first 30 rated games regardless of rating — not modeled here.',
+    'Assumes an established rating. FIDE uses K=40 for a player\'s first 30 rated games regardless of rating, and K=40 for players under 18 rated below 2300 — neither is modeled here.',
+    'Once a player\'s published rating has reached 2400, K stays at 10 even if the rating later drops below 2400 — this estimate only looks at the current rating entered.',
   ];
   const { k, label } = kFactorFor(currentRating);
 
@@ -87,7 +96,14 @@ export function estimateFideRating(input: FideEstimateInput): FideEstimateOutcom
   }
 
   const avgOpponent = opponents.reduce((a, b) => a + b, 0) / n;
-  const performanceRating = avgOpponent + 400 * (2 * (totalScore / n) - 1);
+  let performanceRating: number;
+  if (totalScore === 0) {
+    performanceRating = avgOpponent - 400;
+  } else if (totalScore === n) {
+    performanceRating = avgOpponent + 400;
+  } else {
+    performanceRating = avgOpponent + 400 * Math.log10(totalScore / (n - totalScore));
+  }
 
   return {
     ok: true,
