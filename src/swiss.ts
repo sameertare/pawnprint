@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  commitRound, createTournament, isNwchessRoster, pairNextRound, parseRoster,
+  addExtraGameForBye, commitRound, createTournament, isNwchessRoster, pairNextRound, parseRoster,
   recommendedRounds, setResult, standings,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
@@ -17,6 +17,9 @@ let ev: SwissEvent | null = null;
 
 function cur(): Tournament | null { return ev ? ev.sections[ev.active] : null; }
 function save() { if (ev) localStorage.setItem(STORE_KEY, JSON.stringify(ev)); }
+
+/** Which bye row (if any) currently has its "add extra game" form open — transient UI state, not saved. */
+let addingExtraFor: { round: number; byeId: number } | null = null;
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -362,12 +365,28 @@ function renderRounds(t: Tournament) {
   if (!t.rounds.length) { el.innerHTML = `<p class="hint">No rounds yet — click “Pair next round”.</p>`; return; }
   el.innerHTML = t.rounds
     .map((round) => {
+      const isLatestRound = round.number === t.rounds.length;
       const rows = round.pairings
         .map((pr) => {
           if (pr.byeId != null) {
             const pts = pr.byePoints ?? 1;
             const label = pts === 0.5 ? 'REQUESTED BYE (+½)' : 'BYE (+1)';
-            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td colspan="2" class="mid">${label}</td></tr>`;
+            const isAdding = isLatestRound && addingExtraFor?.round === round.number && addingExtraFor?.byeId === pr.byeId;
+            if (isAdding) {
+              return `<tr><td class="num">${pr.board}</td><td colspan="4">
+                <div class="extra-game-form">
+                  <b>${esc(nameWithRatingOf(t, pr.byeId))}</b> vs
+                  <input type="text" class="text-input extra-name" placeholder="Opponent name" />
+                  <input type="number" class="text-input extra-rating" placeholder="Rating (optional)" min="100" max="3500" />
+                  <button class="btn btn-primary btn-sm add-extra-confirm" data-round="${round.number}" data-bye="${pr.byeId}">Pair →</button>
+                  <button class="btn btn-ghost btn-sm add-extra-cancel">Cancel</button>
+                </div>
+              </td></tr>`;
+            }
+            const addBtn = isLatestRound
+              ? ` <button class="btn btn-ghost btn-sm add-extra-btn" data-round="${round.number}" data-bye="${pr.byeId}">+ Add extra game</button>`
+              : '';
+            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td colspan="2" class="mid">${label}${addBtn}</td></tr>`;
           }
           const sel = (val: string, cur: GameResult) => `<option value="${val}"${cur === val ? ' selected' : ''}>`;
           return `<tr>
@@ -405,6 +424,46 @@ function renderRounds(t: Tournament) {
       renderSectionTabs();
       renderRounds(t2);
       renderPrintArea();
+    });
+  });
+
+  el.querySelectorAll<HTMLButtonElement>('.add-extra-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      addingExtraFor = { round: parseInt(b.dataset.round!, 10), byeId: parseInt(b.dataset.bye!, 10) };
+      const t2 = cur();
+      if (t2) renderRounds(t2);
+    });
+  });
+  el.querySelectorAll<HTMLButtonElement>('.add-extra-cancel').forEach((b) => {
+    b.addEventListener('click', () => {
+      addingExtraFor = null;
+      const t2 = cur();
+      if (t2) renderRounds(t2);
+    });
+  });
+  el.querySelectorAll<HTMLButtonElement>('.add-extra-confirm').forEach((b) => {
+    b.addEventListener('click', () => {
+      const t2 = cur();
+      if (!t2) return;
+      const row = b.closest('tr')!;
+      const name = (row.querySelector('.extra-name') as HTMLInputElement).value.trim();
+      const ratingStr = (row.querySelector('.extra-rating') as HTMLInputElement).value.trim();
+      if (!name) { alert('Enter a name for the extra player.'); return; }
+      let rating: number | null = null;
+      if (ratingStr) {
+        rating = parseInt(ratingStr, 10);
+        if (!Number.isFinite(rating) || rating < 100 || rating > 3500) {
+          alert('Rating must be between 100 and 3500, or left blank.');
+          return;
+        }
+      }
+      const roundNo = parseInt(b.dataset.round!, 10);
+      const byeId = parseInt(b.dataset.bye!, 10);
+      const ok = addExtraGameForBye(t2, roundNo, byeId, name, rating);
+      if (!ok) { alert('Could not add this game — the bye may no longer be available.'); return; }
+      addingExtraFor = null;
+      save();
+      renderAll();
     });
   });
 }

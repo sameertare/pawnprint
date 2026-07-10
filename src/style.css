@@ -342,7 +342,13 @@ a { color: var(--blue); }
 .roster-table td, .roster-table th { padding: 6px 12px; white-space: nowrap; }
 .round-block { margin-bottom: 20px; }
 .round-block h3 { margin: 4px 0 6px; }
+.round-block td { vertical-align: top; }
 .result-sel { min-width: 150px; padding: 5px 8px; }
+
+.extra-game-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.extra-game-form .extra-name { min-width: 160px; }
+.extra-game-form .extra-rating { width: 110px; }
+.extra-game-form .btn-sm { margin-top: 0; }
 
 .wallchart-wrap { max-height: 480px; overflow-y: auto; }
 .wallchart-table th, .wallchart-table td { padding: 5px 8px; }

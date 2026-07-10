@@ -14,6 +14,7 @@ export interface Player {
   requestedByes: number;  // requested half-point byes received
   byeRequests: number[];  // round numbers the player asked to sit out, from the roster import
   withdrawn: boolean;
+  isHouse?: boolean;      // a one-off fill-in added to play a bye recipient; excluded from standings & future pairing
 }
 
 export interface Pairing {
@@ -374,7 +375,7 @@ function pairBracket(pool: Player[]): { pairs: [Player, Player][]; floater: Play
 
 export function pairNextRound(t: Tournament): Round {
   const nextRoundNo = t.rounds.length + 1;
-  const active = t.players.filter((p) => !p.withdrawn);
+  const active = t.players.filter((p) => !p.withdrawn && !p.isHouse);
 
   // Honour requested byes for this specific round — those players sit out with a half-point,
   // and everyone else is paired as usual.
@@ -458,6 +459,76 @@ export function commitRound(t: Tournament, round: Round) {
   t.rounds.push(round);
 }
 
+/**
+ * Convert a bye in the most recently paired round into a real game against a manually-entered
+ * "house" (fill-in) player — e.g. a coach, spectator, or extra player on hand who isn't
+ * officially entered but is available so the bye recipient gets a game instead of sitting out.
+ * The house player is added to the roster so a normal result can be recorded and displayed, but
+ * is excluded from standings and from all future round pairings, since they aren't part of the
+ * Swiss field.
+ *
+ * Only the latest round can be edited this way: undoing a bye recorded in an earlier round would
+ * misalign the bye recipient's per-round opponents/colors history against every round paired
+ * since (standings() reads that history by matching array index to round index).
+ */
+export function addExtraGameForBye(
+  t: Tournament,
+  roundNo: number,
+  byeId: number,
+  houseName: string,
+  houseRating: number | null
+): boolean {
+  if (roundNo !== t.rounds.length) return false; // only the latest round is safe to edit
+  const round = t.rounds[roundNo - 1];
+  if (!round) return false;
+  const pr = round.pairings.find((p) => p.byeId === byeId);
+  if (!pr) return false;
+  const player = t.players.find((p) => p.id === byeId);
+  if (!player) return false;
+  const name = houseName.trim();
+  if (!name) return false;
+
+  // Undo the bye.
+  const points = pr.byePoints ?? 1;
+  player.score -= points;
+  player.opponents.pop(); // the -1 recorded by commitRound
+  if (points === 0.5) player.requestedByes = Math.max(0, (player.requestedByes ?? 0) - 1);
+  else player.byes = Math.max(0, (player.byes ?? 0) - 1);
+
+  // Add the house player.
+  const nextId = Math.max(0, ...t.players.map((p) => p.id)) + 1;
+  const house: Player = {
+    id: nextId,
+    name,
+    rating: houseRating,
+    score: 0,
+    opponents: [],
+    colors: [],
+    byes: 0,
+    requestedByes: 0,
+    byeRequests: [],
+    withdrawn: false,
+    isHouse: true,
+  };
+  t.players.push(house);
+
+  // Pair them for real, honouring the bye recipient's actual color balance/history.
+  const { whiteId, blackId } = assignColors(player, house);
+  pr.byeId = null;
+  pr.byePoints = undefined;
+  pr.whiteId = whiteId;
+  pr.blackId = blackId;
+  pr.result = null;
+
+  const w = whiteId === player.id ? player : house;
+  const b = blackId === player.id ? player : house;
+  w.opponents.push(b.id); w.colors.push('w');
+  b.opponents.push(w.id); b.colors.push('b');
+
+  round.complete = round.pairings.every((p) => p.byeId != null || p.result != null);
+  return true;
+}
+
 /** Enter/replace a game result and keep scores consistent. */
 export function setResult(t: Tournament, roundNo: number, board: number, result: GameResult) {
   const round = t.rounds.find((r) => r.number === roundNo);
@@ -493,8 +564,8 @@ export interface Standing {
 }
 
 export function standings(t: Tournament): Standing[] {
-  const byId = new Map(t.players.map((p) => [p.id, p]));
-  const rows: Omit<Standing, 'rank'>[] = t.players.map((p) => {
+  const byId = new Map(t.players.map((p) => [p.id, p])); // keeps house players so opponents can resolve them
+  const rows: Omit<Standing, 'rank'>[] = t.players.filter((p) => !p.isHouse).map((p) => {
     let buchholz = 0;
     let sb = 0;
     let wins = 0, draws = 0, losses = 0;
