@@ -24,11 +24,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Build with the base path set to the repo name so assets resolve under
-      # https://<user>.github.io/<repo>/ . For a user/org page (repo named
-      # <user>.github.io) or a custom domain, this still works because the repo
-      # name equals the site root.
-      - run: npx vite build --base=/${{ github.event.repository.name }}/
+      # Custom domain (openfile.app, see public/CNAME) serves from the site root, so the
+      # default base path ("/") is correct here — no --base override needed.
+      - run: npx vite build
       - run: touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v5
         with:
