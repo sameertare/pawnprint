@@ -1,9 +1,12 @@
 /**
- * US Chess (USCF) rating estimator — an unofficial approximation of the published rating
- * formula (win expectancy with the 400-point cap, the N+m K-factor, and a bonus provision for
- * large over-performance). US Chess's actual post-event computation is Glickman-based and run
- * centrally; this mirrors the classic public "rating estimator" formula players commonly use to
- * predict their own change, not the exact official algorithm.
+ * US Chess (USCF) rating estimator — implements the published rating formula from
+ * "The US Chess Rating System" (Glickman & Doan, rev. Sept 2020), Section 3 (effective
+ * number of games) and Section 4.2 (standard rating formula, incl. dual-rated K and the
+ * bonus provision, bonus multiplier B=10 effective 2025-06-03). Players with 8 or fewer
+ * prior games use the simplified "special" formula (Section 4.1) rather than the full
+ * iterative linear-programming solve, per the document's own note that this single-step
+ * approximation is "usually identical" to the full result. US Chess's actual computation
+ * also folds in opponent-repeat and all-win/all-loss adjustments this tool doesn't track.
  */
 
 export interface RatingEstimateInput {
@@ -17,7 +20,7 @@ export interface RatingEstimateInput {
 
 export interface RatingEstimateResult {
   gamesCounted: number;
-  winExpectancy: number; // sum of per-game expectancies ("We")
+  winExpectancy: number; // sum of per-game expectancies ("We" / "E")
   kFactor: number;
   effectiveN: number;
   established: boolean;
@@ -35,21 +38,42 @@ export type RatingEstimateOutcome =
 
 const MIN_RATING = 100;
 const MAX_RATING = 3200;
-const ESTABLISHED_GAMES = 26;
-const ESTABLISHED_N = 50;
-const MIN_PROVISIONAL_N = 4;
+const ESTABLISHED_GAMES = 26; // "established" per US Chess (>25 games) — used for notes only
+const SPECIAL_FORMULA_MAX_GAMES = 8; // N <= 8 uses the "special" (provisional) formula
+const BONUS_MIN_GAMES = 3; // bonus provision only applies when m >= 3
+const BONUS_MULTIPLIER_B = 10; // effective 2025-06-03 (was 12 from 2023, 14 from 2017)
 const DUAL_RATED_THRESHOLD = 2200;
-const DUAL_RATED_N_BOOST = 50;
-const RATING_DIFF_CAP = 400;
+const DUAL_RATED_TOP = 2500;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-/** Per-game win expectancy from the classic Elo logistic curve, with the ±400 rating-difference cap. */
+/** N* — the rating-dependent ceiling on effective games (Section 3, eq. 1). */
+function nStar(rating: number): number {
+  if (rating > 2355) return 50;
+  return 50 / Math.sqrt(0.662 + 0.00000739 * (2569 - rating) ** 2);
+}
+
+/** Standard winning expectancy (Section 4.2) — no rating-difference cap. */
 function winExpectancy(playerRating: number, opponentRating: number): number {
-  const diff = clamp(playerRating - opponentRating, -RATING_DIFF_CAP, RATING_DIFF_CAP);
-  return 1 / (1 + Math.pow(10, -diff / 400));
+  return 1 / (1 + Math.pow(10, -(playerRating - opponentRating) / 400));
+}
+
+/** K-factor, including the dual-rated (OTB Quick/Regular) override for 2200+ players. */
+function kFactor(rating: number, effectiveN: number, m: number, useDualRatedLowerK: boolean, notes: string[]): number {
+  if (useDualRatedLowerK && rating > DUAL_RATED_THRESHOLD) {
+    if (rating >= DUAL_RATED_TOP) {
+      notes.push(`Dual-rated K applied: rating ≥ ${DUAL_RATED_TOP}, using K = 200/(N′+m).`);
+      return 200 / (effectiveN + m);
+    }
+    notes.push(`Dual-rated K applied: using K = 800(6.5 − 0.0025×R)/(N′+m) for ratings between ${DUAL_RATED_THRESHOLD} and ${DUAL_RATED_TOP}.`);
+    return (800 * (6.5 - 0.0025 * rating)) / (effectiveN + m);
+  }
+  if (useDualRatedLowerK) {
+    notes.push(`Dual-rated lower-K option is checked, but only applies above ${DUAL_RATED_THRESHOLD} — not used for this rating.`);
+  }
+  return 800 / (effectiveN + m);
 }
 
 export function estimateRating(input: RatingEstimateInput): RatingEstimateOutcome {
@@ -71,73 +95,81 @@ export function estimateRating(input: RatingEstimateInput): RatingEstimateOutcom
   if (opponents.some((r) => r < MIN_RATING || r > MAX_RATING)) {
     return { ok: false, error: `Opponent ratings must be between ${MIN_RATING} and ${MAX_RATING}.` };
   }
-  const n = opponents.length;
-  if (!Number.isFinite(totalScore) || totalScore < 0 || totalScore > n) {
-    return { ok: false, error: `Total score must be between 0 and ${n} (the number of opponents entered).` };
+  const m = opponents.length;
+  if (!Number.isFinite(totalScore) || totalScore < 0 || totalScore > m) {
+    return { ok: false, error: `Total score must be between 0 and ${m} (the number of opponents entered).` };
   }
 
   const established = priorGames >= ESTABLISHED_GAMES;
-  let effectiveN = established ? ESTABLISHED_N : Math.max(priorGames, MIN_PROVISIONAL_N);
-
   const notes: string[] = [];
-  if (!established) {
+
+  let we: number;
+  let k: number;
+  let effectiveN: number;
+  let baseChange: number;
+  let bonus = 0;
+
+  if (priorGames <= SPECIAL_FORMULA_MAX_GAMES) {
+    // Special/provisional formula (Section 4.1), approximated by its single-step estimate —
+    // the document notes this matches the full iterative solve in most cases.
+    effectiveN = Math.min(priorGames, nStar(currentRating));
+    we = opponents.reduce((sum, opp) => sum + winExpectancy(currentRating, opp), 0);
+    k = 800 / (effectiveN + m);
+    const sumOpponents = opponents.reduce((a, b) => a + b, 0);
+    const M = (effectiveN * currentRating + sumOpponents + 400 * (2 * totalScore - m)) / (effectiveN + m);
+    baseChange = M - currentRating;
     notes.push(
-      `With ${priorGames} prior rated game(s), US Chess treats this player as provisional (fewer than ${ESTABLISHED_GAMES}). ` +
-      `Provisional ratings are normally set by the initial-rating formula rather than this K-factor estimator — treat this result as a rough approximation.`
+      `With ${priorGames} prior rated game(s) (≤ ${SPECIAL_FORMULA_MAX_GAMES}), US Chess uses the "special" (provisional) formula, ` +
+      `approximated here by its single-step estimate rather than the full iterative solve.`
     );
-  }
-  if (useDualRatedLowerK) {
-    if (currentRating >= DUAL_RATED_THRESHOLD) {
-      effectiveN += DUAL_RATED_N_BOOST;
-      notes.push(`Dual-rated adjustment applied: effective games increased by ${DUAL_RATED_N_BOOST} for a lower K (rating ≥ ${DUAL_RATED_THRESHOLD}).`);
+  } else {
+    // Standard formula (Section 4.2).
+    effectiveN = Math.min(priorGames, nStar(currentRating));
+    we = opponents.reduce((sum, opp) => sum + winExpectancy(currentRating, opp), 0);
+    k = kFactor(currentRating, effectiveN, m, useDualRatedLowerK, notes);
+    baseChange = k * (totalScore - we);
+    if (m >= BONUS_MIN_GAMES) {
+      const mPrime = Math.max(m, 4);
+      bonus = Math.max(0, baseChange - BONUS_MULTIPLIER_B * Math.sqrt(mPrime));
+      if (bonus > 0) notes.push(`Bonus applied (B=${BONUS_MULTIPLIER_B}): scored well above the K(S−E) + B√m′ threshold.`);
     } else {
-      notes.push(`Dual-rated lower-K option is checked, but only applies at ${DUAL_RATED_THRESHOLD}+ — not used for this rating.`);
+      notes.push(`Bonus provision requires at least ${BONUS_MIN_GAMES} games in the event — not applicable here.`);
     }
+  }
+
+  if (!established) {
+    notes.push(`With ${priorGames} prior rated game(s), this player is not yet "established" (fewer than ${ESTABLISHED_GAMES}) under US Chess's definition.`);
   }
   if (age !== undefined && Number.isFinite(age) && age < 20) {
     notes.push('Junior player (under 20) — US Chess scholastic rating floors and related provisions may apply beyond this estimate.');
   }
 
-  const we = opponents.reduce((sum, opp) => sum + winExpectancy(currentRating, opp), 0);
-  const k = 800 / (effectiveN + n);
-  const overperformance = totalScore - we;
-  const baseChange = k * overperformance;
+  const uncappedNewRating = currentRating + baseChange + bonus;
+  const newRating = clamp(Math.round(uncappedNewRating), MIN_RATING, 2700);
+  const ratingChange = newRating - currentRating;
 
-  // Bonus: when a player scores well above expectation, US Chess adds a bonus so a single great
-  // event isn't as capped by an established player's large effective-games denominator. Modeled
-  // here as half the gap between the normal-K change and what a much lower N (newer player) K
-  // would have produced, applied only once the over-performance clears a threshold.
-  let bonus = 0;
-  if (overperformance > n / 2) {
-    const kBonus = 800 / (MIN_PROVISIONAL_N + n);
-    const altChange = kBonus * overperformance;
-    bonus = Math.max(0, (altChange - baseChange) / 2);
-    if (bonus > 0) notes.push('Bonus applied for scoring well above expectation.');
+  const avgOpponent = opponents.reduce((a, b) => a + b, 0) / m;
+  let performanceRating: number;
+  if (totalScore === 0) {
+    performanceRating = avgOpponent - 400;
+  } else if (totalScore === m) {
+    performanceRating = avgOpponent + 400;
+  } else {
+    performanceRating = avgOpponent + 400 * Math.log10(totalScore / (m - totalScore));
   }
-
-  const uncappedChange = baseChange + bonus;
-  const MAX_EVENT_SWING = 400; // sanity cap on a single event's total swing, incl. bonus
-  const ratingChange = clamp(uncappedChange, -MAX_EVENT_SWING, MAX_EVENT_SWING);
-  if (ratingChange !== uncappedChange) {
-    notes.push(`Rating change capped at ${ratingChange > 0 ? '+' : ''}${Math.round(ratingChange)} for a single event.`);
-  }
-  const newRating = currentRating + ratingChange;
-
-  const avgOpponent = opponents.reduce((a, b) => a + b, 0) / n;
-  const performanceRating = avgOpponent + 400 * (2 * (totalScore / n) - 1);
 
   return {
     ok: true,
     result: {
-      gamesCounted: n,
+      gamesCounted: m,
       winExpectancy: Math.round(we * 100) / 100,
       kFactor: Math.round(k * 10) / 10,
-      effectiveN,
+      effectiveN: Math.round(effectiveN * 10) / 10,
       established,
       baseRatingChange: Math.round(baseChange * 10) / 10,
       bonus: Math.round(bonus * 10) / 10,
-      ratingChange: Math.round(ratingChange * 10) / 10,
-      newRating: Math.round(newRating),
+      ratingChange,
+      newRating,
       performanceRating: Math.round(performanceRating),
       notes,
     },
