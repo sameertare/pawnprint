@@ -98,8 +98,8 @@ code { background: var(--bg-inset); padding: 1px 5px; border-radius: 4px; }
 .config-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; }
 .config-row label { display: flex; flex-direction: column; gap: 5px; font-size: 0.88rem; color: var(--text-dim); }
 
-.lichess-fetch { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
-.lichess-fetch #lichess-status { margin-top: 8px; }
+.bulk-fetch { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.bulk-fetch .hint:last-child { margin-top: 8px; }
 
 .game-moves { margin-top: 10px; background: var(--bg-inset); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 0.86rem; }
 .game-moves summary { cursor: pointer; color: var(--gold); font-weight: 600; }

@@ -39,7 +39,7 @@
         <div id="file-summary" class="file-summary"></div>
         <button id="load-sample" class="btn btn-ghost">…or try the bundled sample games</button>
 
-        <div class="lichess-fetch">
+        <div class="bulk-fetch">
           <p class="hint" style="margin:14px 0 8px;"><strong>…or fetch a lichess account's games directly</strong></p>
           <div class="config-row">
             <label>Lichess username
@@ -56,6 +56,26 @@
             <button id="lichess-fetch-btn" class="btn btn-primary">Fetch from lichess</button>
           </div>
           <div id="lichess-status" class="hint"></div>
+        </div>
+
+        <div class="bulk-fetch">
+          <p class="hint" style="margin:14px 0 8px;"><strong>…or fetch a chess.com account's games directly</strong></p>
+          <div class="config-row">
+            <label>Chess.com username
+              <input type="text" id="chesscom-username" class="text-input" placeholder="e.g. Hikaru" />
+            </label>
+            <label>How far back
+              <select id="chesscom-months">
+                <option value="1">Last month</option>
+                <option value="3" selected>Last 3 months</option>
+                <option value="6">Last 6 months</option>
+                <option value="12">Last 12 months</option>
+                <option value="24">Last 24 months</option>
+              </select>
+            </label>
+            <button id="chesscom-fetch-btn" class="btn btn-primary">Fetch from chess.com</button>
+          </div>
+          <div id="chesscom-status" class="hint"></div>
         </div>
       </section>
 

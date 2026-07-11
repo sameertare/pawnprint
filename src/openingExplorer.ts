@@ -41,6 +41,10 @@ const lichessUsernameInput = $('#lichess-username') as HTMLInputElement;
 const lichessMaxSelect = $('#lichess-max') as HTMLSelectElement;
 const lichessFetchBtn = $('#lichess-fetch-btn') as HTMLButtonElement;
 const lichessStatusEl = $('#lichess-status');
+const chesscomUsernameInput = $('#chesscom-username') as HTMLInputElement;
+const chesscomMonthsSelect = $('#chesscom-months') as HTMLSelectElement;
+const chesscomFetchBtn = $('#chesscom-fetch-btn') as HTMLButtonElement;
+const chesscomStatusEl = $('#chesscom-status');
 
 const board = new Board($('#board'));
 
@@ -226,6 +230,67 @@ async function fetchFromLichess() {
     lichessStatusEl.textContent = `Could not fetch from lichess: ${e instanceof Error ? e.message : String(e)}`;
   } finally {
     lichessFetchBtn.disabled = false;
+  }
+}
+
+// ---------- chess.com username bulk fetch ----------
+// Chess.com's public "Published Data API" has no single all-games endpoint like lichess — games
+// are grouped into monthly archives, so this fetches the archive list, then the N most recent
+// months in parallel, and concatenates each game's own `pgn` field (already a complete PGN chunk,
+// Link header included) into one blob for the existing splitPgn/tryParseGame pipeline.
+interface ChessComArchivesResponse { archives: string[]; }
+interface ChessComGamesResponse { games: { pgn?: string }[]; }
+
+chesscomFetchBtn.addEventListener('click', () => void fetchFromChessCom());
+chesscomUsernameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void fetchFromChessCom();
+});
+
+async function fetchFromChessCom() {
+  const username = chesscomUsernameInput.value.trim();
+  if (!username) {
+    chesscomStatusEl.textContent = 'Enter a chess.com username first.';
+    return;
+  }
+  const monthsBack = parseInt(chesscomMonthsSelect.value, 10);
+  chesscomFetchBtn.disabled = true;
+  chesscomStatusEl.textContent = `Fetching up to ${monthsBack} month(s) of games for ${username} from chess.com…`;
+  try {
+    const archivesResp = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(username.toLowerCase())}/games/archives`);
+    if (archivesResp.status === 404) throw new Error(`No chess.com account named "${username}" found.`);
+    if (!archivesResp.ok) throw new Error(`HTTP ${archivesResp.status}`);
+    const archivesData: ChessComArchivesResponse = await archivesResp.json();
+    const archives = archivesData.archives ?? [];
+    if (!archives.length) {
+      chesscomStatusEl.textContent = `${username} has no game archives on chess.com.`;
+      return;
+    }
+    const selected = archives.slice(-monthsBack); // archives are oldest-first; take the most recent N
+    const monthResults = await Promise.all(
+      selected.map(async (url) => {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) return [];
+          const data: ChessComGamesResponse = await r.json();
+          return (data.games ?? []).map((g) => g.pgn).filter((p): p is string => !!p);
+        } catch {
+          return []; // one bad month shouldn't sink the whole fetch
+        }
+      })
+    );
+    const allPgns = monthResults.flat();
+    if (!allPgns.length) {
+      chesscomStatusEl.textContent = `No games found for ${username} in the selected range.`;
+      return;
+    }
+    const text = allPgns.join('\n\n');
+    const file = new File([text], `${username}-chesscom.pgn`);
+    await handleFiles([file], username);
+    chesscomStatusEl.textContent = `Loaded ${allPgns.length} game(s) for ${username} from chess.com.`;
+  } catch (e) {
+    chesscomStatusEl.textContent = `Could not fetch from chess.com: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    chesscomFetchBtn.disabled = false;
   }
 }
 
