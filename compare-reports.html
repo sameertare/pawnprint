@@ -26,15 +26,15 @@
     <div id="app">
       <header class="app-header">
         <h1>⚖ Compare Reports</h1>
-        <p class="tagline">Upload two saved Performance Analysis reports and see exactly what changed — every metric, side by side, with the delta highlighted.</p>
+        <p class="tagline">Upload two saved Performance Analysis reports and see exactly what changed — every metric, side by side, with the delta highlighted. Works for one player's progress over time, or head-to-head between two different players.</p>
       </header>
 
       <section class="card" id="load-card">
         <h2><span class="step">1</span> Load two reports</h2>
-        <p class="hint">Both must be <code>report.md</code> files downloaded from Performance Analysis — e.g. one from last month and one from today, to see how you've progressed.</p>
+        <p class="hint">Both must be <code>report.md</code> files downloaded from Performance Analysis. Load the same player's report from two points in time to track progress, or two different players' reports for a head-to-head comparison — both are supported.</p>
         <div class="compare-upload-grid">
           <div class="compare-slot">
-            <h3>Report A <span class="hint">(baseline)</span></h3>
+            <h3>Player A</h3>
             <div id="dropzone-a" class="dropzone">
               <p><strong>Drop report.md here</strong> — or</p>
               <label class="btn btn-primary" for="file-a">Choose file</label>
@@ -43,7 +43,7 @@
             <div id="summary-a" class="file-summary"></div>
           </div>
           <div class="compare-slot">
-            <h3>Report B <span class="hint">(compare against)</span></h3>
+            <h3>Player B</h3>
             <div id="dropzone-b" class="dropzone">
               <p><strong>Drop report.md here</strong> — or</p>
               <label class="btn btn-primary" for="file-b">Choose file</label>

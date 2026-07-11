@@ -65,6 +65,37 @@ export function compareOpenings(aRows: OpeningRow[], bRows: OpeningRow[]): Openi
   return out;
 }
 
+export interface HeadToHead {
+  aWins: number;
+  bWins: number;
+  ties: number;
+  leader: 'a' | 'b' | 'tie';
+}
+
+/** Tallies every directional (non-neutral) metric across the whole comparison to answer "who
+ *  came out ahead overall" — used for the head-to-head verdict when comparing two different
+ *  players rather than one player's progress over time. */
+export function headToHead(sections: ComparisonSections): HeadToHead {
+  const rows = [
+    ...sections.overview,
+    ...sections.byColorWhite,
+    ...sections.byColorBlack,
+    ...sections.byTimeClass.flatMap((t) => t.rows),
+    ...sections.phases.flatMap((p) => p.rows),
+    ...sections.tactics,
+    ...sections.patterns,
+  ];
+  let aWins = 0, bWins = 0, ties = 0;
+  for (const row of rows) {
+    const side = betterSide(row);
+    if (side === 'a') aWins++;
+    else if (side === 'b') bWins++;
+    else if (side === 'tie') ties++;
+  }
+  const leader = aWins === bWins ? 'tie' : aWins > bWins ? 'a' : 'b';
+  return { aWins, bWins, ties, leader };
+}
+
 export interface ComparisonSections {
   overview: DeltaRow[];
   byColorWhite: DeltaRow[];

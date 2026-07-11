@@ -3,7 +3,7 @@ import { parseMarkdownReport } from './markdown';
 import { aggregate, scorePct } from './aggregate';
 import type { Aggregates } from './aggregate';
 import type { ReportData } from './types';
-import { compareReports, betterSide } from './reportCompare';
+import { compareReports, betterSide, headToHead } from './reportCompare';
 import type { DeltaRow, OpeningDelta } from './reportCompare';
 import { registerServiceWorker } from './pwa';
 
@@ -122,13 +122,31 @@ function tryRender() {
 
   const ra = slots.a.report, rb = slots.b.report;
   const sameName = ra.meta.username.trim().toLowerCase() === rb.meta.username.trim().toLowerCase();
-  headerCardEl.innerHTML = `
-    <h2>Comparing</h2>
+  const h2h = headToHead(cmp);
+
+  const verdictHtml = (() => {
+    if (h2h.leader === 'tie') return `<p class="hint">Dead even — ${h2h.aWins} metrics each${h2h.ties ? `, ${h2h.ties} tied` : ''}.</p>`;
+    const winnerName = h2h.leader === 'a' ? ra.meta.username : rb.meta.username;
+    const winCount = h2h.leader === 'a' ? h2h.aWins : h2h.bWins;
+    const loseCount = h2h.leader === 'a' ? h2h.bWins : h2h.aWins;
+    return `<p class="hint"><b class="pos">${esc(winnerName)}</b> comes out ahead, leading on ${winCount} of ${winCount + loseCount + h2h.ties} compared metrics (${loseCount} to ${winnerName === ra.meta.username ? rb.meta.username : ra.meta.username}${h2h.ties ? `, ${h2h.ties} tied` : ''}).</p>`;
+  })();
+
+  headerCardEl.innerHTML = sameName
+    ? `
+    <h2>Comparing progress</h2>
     <div class="summary-cards">
       <div class="stat-card"><span class="big">${esc(ra.meta.username)}</span><span class="label">Report A · ${esc(ra.games.length.toString())} games</span></div>
       <div class="stat-card"><span class="big">${esc(rb.meta.username)}</span><span class="label">Report B · ${esc(rb.games.length.toString())} games</span></div>
     </div>
-    ${sameName ? '' : `<p class="hint">⚠ These reports have different usernames (<b>${esc(ra.meta.username)}</b> vs <b>${esc(rb.meta.username)}</b>) — comparing anyway, but double-check this is intentional.</p>`}
+  `
+    : `
+    <h2>Head-to-head</h2>
+    <div class="summary-cards">
+      <div class="stat-card"><span class="big">${esc(ra.meta.username)}</span><span class="label">Player A · ${esc(ra.games.length.toString())} games</span></div>
+      <div class="stat-card"><span class="big">${esc(rb.meta.username)}</span><span class="label">Player B · ${esc(rb.games.length.toString())} games</span></div>
+    </div>
+    ${verdictHtml}
   `;
 
   $('#overview-table').innerHTML = deltaRowsTableHtml(cmp.overview);
