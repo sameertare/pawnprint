@@ -212,11 +212,11 @@ Not in v1 (noted as future work): username-based bulk game fetch from chess.com/
 Estimate a new US Chess (USCF) rating after an event, using the published rating formula.
 
 - **Inputs:** current rating, total score, number of prior rated games, age (optional), and up to 15 opponent ratings.
-- **Formula:** per-game win expectancy on the classic logistic curve with the ±400 rating-difference cap; K-factor = 800 / (N + games), where N is 50 for an established player (≥ 26 prior games) or based on actual prior games for a provisional one; a bonus provision for scoring well above expectation; performance rating from the average opponent rating and score percentage.
-- **Dual-rated option:** "Use lower K values for high rated players (2200 and up) for estimating regular ratings in dual-rated events" — when checked and the current rating is 2200+, effective games are boosted for a lower K.
+- **Formula:** implements the published US Chess rating formula (Glickman & Doan, "The US Chess Rating System," rev. Sept 2020), Sections 3–4.2. Per-game win expectancy uses the classic logistic curve (no rating-difference cap). The effective number of games is `N = min(priorGames, N*)`, where the rating-dependent ceiling `N* = 50 / sqrt(0.662 + 0.00000739 × (2569 − R)²)` (capped at 50 above rating 2355) — not a flat 50. Players with **8 or fewer** prior games use the simplified "special"/provisional formula (Section 4.1); above that, the standard formula applies with K = 800 / (N′ + m) and a bonus provision (bonus multiplier B = 10, effective 2025-06-03) added when the base change exceeds `B × √max(m, 4)`. Performance rating is derived from the average opponent rating and score percentage.
+- **Dual-rated option:** "Use lower K values for high rated players (2200 and up) for estimating regular ratings in dual-rated events" — when checked and the current rating is above 2200, K is overridden: `K = 200/(N′+m)` at 2500+, or `K = 800(6.5 − 0.0025×R)/(N′+m)` between 2200 and 2500.
 - **Output:** new rating, rating change, performance rating, K value, plus a detail table (win expectancy sum, effective N, established/provisional status, base change vs. bonus) and contextual notes (provisional-rating caveat, junior-player note, dual-rated applicability, single-event swing cap).
 
-This is an **unofficial estimate**, clearly labeled as such in the tool — US Chess's actual post-event computation is run centrally (Glickman-based) and may differ slightly; the estimator mirrors the classic public formula players commonly use to predict their own change. The engine (`src/ratingEngine.ts`) is pure and framework-free.
+This is an **unofficial estimate**, clearly labeled as such in the tool — US Chess's actual post-event computation is run centrally (Glickman-based), also folding in opponent-repeat and all-win/all-loss adjustments this tool doesn't track, and may differ slightly. The engine (`src/ratingEngine.ts`) is pure and framework-free.
 
 ---
 
