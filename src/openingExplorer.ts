@@ -19,7 +19,6 @@ let explorerGames: ExplorerGame[] = [];
 let tree: TreeNode | null = null;
 let path: string[] = []; // SAN path from root to the currently viewed node
 let minGames = 2;
-let masterFetchToken = 0; // guards against a slow fetch resolving after the user navigated away
 const MAX_GAMES_SHOWN = 50; // cap the "games reaching this position" list for very popular nodes
 
 // ---------- dom ----------
@@ -36,7 +35,6 @@ const resultsEl = $('#results');
 const breadcrumbEl = $('#breadcrumb');
 const nodeStatsEl = $('#node-stats');
 const yourMovesEl = $('#your-moves');
-const masterMovesEl = $('#master-moves');
 const gamesHereEl = $('#games-here');
 const gamesHereCountEl = $('#games-here-count');
 const lichessUsernameInput = $('#lichess-username') as HTMLInputElement;
@@ -292,7 +290,7 @@ function render() {
   // Your moves from here
   const children = childSummaries(node).filter((c) => c.games >= minGames);
   yourMovesEl.innerHTML = children.length
-    ? movesTableHtml(children, true)
+    ? movesTableHtml(children)
     : `<p class="hint">No branch here reaches at least ${minGames} game(s). ${node.games ? 'Lower the game threshold above to see more.' : 'No games reached this position.'}</p>`;
   yourMovesEl.querySelectorAll<HTMLElement>('.move-row').forEach((row) => {
     row.addEventListener('click', () => {
@@ -302,10 +300,9 @@ function render() {
   });
 
   renderGamesHere(node);
-  void renderMasterMoves(node.fen);
 }
 
-function movesTableHtml(children: ChildSummary[], clickable: boolean): string {
+function movesTableHtml(children: ChildSummary[]): string {
   const maxGames = Math.max(...children.map((c) => c.games));
   const rows = children
     .map((c) => {
@@ -313,7 +310,7 @@ function movesTableHtml(children: ChildSummary[], clickable: boolean): string {
       const drawW = (c.draws / c.games) * 100;
       const lossW = (c.losses / c.games) * 100;
       const barWidth = 40 + (c.games / maxGames) * 60; // relative frequency, floor so thin bars stay visible
-      return `<tr class="${clickable ? 'move-row' : ''}" ${clickable ? `data-san="${esc(c.san)}"` : ''}>
+      return `<tr class="move-row" data-san="${esc(c.san)}">
         <td><b>${esc(c.san)}</b></td>
         <td class="num">${c.games}</td>
         <td class="num">${c.scorePct}%</td>
@@ -377,42 +374,4 @@ function renderGamesHere(node: TreeNode) {
       row.hidden = !row.hidden;
     });
   });
-}
-
-// ---------- master-game comparison (Lichess masters database, public API) ----------
-async function renderMasterMoves(fen: string) {
-  const token = ++masterFetchToken;
-  masterMovesEl.innerHTML = `<p class="hint">Loading master games…</p>`;
-  try {
-    const resp = await fetch(`https://explorer.lichess.org/masters?fen=${encodeURIComponent(fen)}&moves=10&topGames=0`);
-    if (token !== masterFetchToken) return; // user navigated to a different node while this was in flight
-    if (resp.status === 401 || resp.status === 429) {
-      masterMovesEl.innerHTML = `<p class="hint">Lichess's masters database isn't accepting requests right now (HTTP ${resp.status}) — this is on their end, not yours. Your own move stats above are unaffected; try again later.</p>`;
-      return;
-    }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const moves: { san: string; white: number; draws: number; black: number }[] = data.moves ?? [];
-    if (!moves.length) {
-      masterMovesEl.innerHTML = `<p class="hint">No master games reach this exact position.</p>`;
-      return;
-    }
-    const children: ChildSummary[] = moves.map((m) => {
-      const games = m.white + m.draws + m.black;
-      return {
-        san: m.san,
-        fen: '',
-        games,
-        wins: m.white,
-        draws: m.draws,
-        losses: m.black,
-        scorePct: games ? Math.round(((m.white + m.draws * 0.5) / games) * 1000) / 10 : 0,
-      };
-    });
-    masterMovesEl.innerHTML = movesTableHtml(children, false) +
-      `<p class="hint" style="margin-top:8px;">Score % here is White's score (win + ½ draw), for comparison — not from your color's perspective.</p>`;
-  } catch (e) {
-    if (token !== masterFetchToken) return;
-    masterMovesEl.innerHTML = `<p class="hint">Could not reach the Lichess masters database (${esc(e instanceof Error ? e.message : String(e))}). Your own move stats above are unaffected.</p>`;
-  }
 }

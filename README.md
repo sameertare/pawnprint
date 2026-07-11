@@ -8,7 +8,7 @@ A local-first chess toolkit with **six tools**, each its own single-page app, re
 | `analyze.html` | **Performance Analysis** | Deep performance report from chess.com / lichess PGNs |
 | `live.html` | **Live & Engine** | Watch a live lichess game with move feedback; best-move suggestion from any position |
 | `swiss.html` | **Swiss Pairings** | Run a full Swiss tournament from a roster |
-| `opening-explorer.html` | **Opening Explorer** | Branching opening tree from your own PGNs, with master-game comparison |
+| `opening-explorer.html` | **Opening Explorer** | Branching opening tree from your own PGNs |
 | `rating.html` | **USCF Rating Estimator** | Estimate a new US Chess rating after an event |
 | `fide-rating.html` | **FIDE Rating Estimator** | Estimate a new FIDE Standard rating after an event |
 
@@ -121,7 +121,7 @@ src/
   swissEngine.ts    pure Swiss logic: roster parsing, pairing, results, standings
   swiss.ts          Swiss Pairings UI
   openingTree.ts    pure opening-tree logic: builds a move trie from games, aggregates W/D/L per node
-  openingExplorer.ts Opening Explorer UI (file load, player detection, tree navigation, master-game fetch)
+  openingExplorer.ts Opening Explorer UI (file load, player detection, tree navigation)
   ratingEngine.ts   pure USCF rating-estimate logic
   rating.ts         USCF Rating Estimator UI
   fideRatingEngine.ts pure FIDE rating-estimate logic
@@ -202,9 +202,8 @@ Turns your own PGNs into a branching opening tree — like [openingtree.com](htt
 - **Browsing:** a board (reusing the same `Board` component as Live & Engine) plus a clickable breadcrumb and a move-list table sorted by frequency, each row showing games played, score %, and a win/draw/loss bar. Click a move to drill in; **Back**/**Start**/flip to navigate.
 - **Filters:** color (White/Black — rebuilds the tree and flips the board), and a minimum-games threshold to hide rarely-played branches.
 - **Games reaching this position:** every individual game behind the current node — opponent, result, date, a link to the game if the PGN had one, and an expandable full move list. Capped at 50 rows for very popular positions (with a "+N more" note), same as openingtree.com's per-position games list.
-- **Master-game comparison:** the same position's stats from the free [Lichess masters explorer API](https://lichess.org/api#tag/Opening-Explorer) shown alongside your own, so you can see where your repertoire diverges from master play. Degrades gracefully with an inline notice if that public API is unavailable — your own tree is unaffected either way.
 
-Not in v1 (noted as future work): opponent-prep mode (load someone else's account to see their repertoire) and variant support — real openingtree.com features, scoped out to keep this focused.
+Not in v1 (noted as future work): opponent-prep mode (load someone else's account to see their repertoire), variant support, and master-game comparison — real openingtree.com features, scoped out to keep this focused.
 
 ---
 

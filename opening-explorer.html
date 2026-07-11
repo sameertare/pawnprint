@@ -25,7 +25,7 @@
     <div id="app">
       <header class="app-header">
         <h1>🌳 Opening Explorer</h1>
-        <p class="tagline">Turn your own games into a branching opening tree — see how often you play each move and how you actually score from there, compared against master games.</p>
+        <p class="tagline">Turn your own games into a branching opening tree — see how often you play each move and how you actually score from there.</p>
       </header>
 
       <section class="card" id="load-card">
@@ -101,11 +101,6 @@
             </section>
 
             <section class="card">
-              <h2>Master games from here <span class="hint">(Lichess masters database)</span></h2>
-              <div id="master-moves" class="games-table-wrap"></div>
-            </section>
-
-            <section class="card">
               <h2>Games reaching this position <span id="games-here-count" class="hint"></span></h2>
               <div id="games-here" class="games-table-wrap"></div>
             </section>
@@ -114,7 +109,7 @@
       </section>
 
       <footer class="app-footer">
-        OpenFile · tree built entirely in your browser · master-game comparison via the public Lichess explorer API
+        OpenFile · tree built entirely in your browser
       </footer>
     </div>
     <script type="module" src="/src/openingExplorer.ts"></script>
