@@ -323,6 +323,22 @@ a { color: var(--blue); }
 .spark-cell { width: 150px; height: 32px; padding: 2px 8px !important; }
 .spark-cell svg { width: 140px; height: 28px; }
 .games-table-wrap a { text-decoration: none; font-size: 1.1rem; }
+
+.breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 10px 0 4px; }
+.crumb {
+  background: transparent; border: none; color: var(--text-dim); font-size: 0.88rem;
+  padding: 3px 6px; border-radius: 5px; cursor: pointer;
+}
+.crumb:hover, .crumb:focus-visible { background: var(--bg-inset); color: var(--text); }
+.crumb:last-child { color: var(--text); font-weight: 600; }
+.crumb-sep { color: var(--text-dim); opacity: 0.5; }
+
+.move-row { cursor: pointer; }
+.move-row:hover { background: var(--bg-inset); }
+.score-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; min-width: 40px; background: var(--bg-inset); }
+.score-bar .seg.win { background: var(--accent); }
+.score-bar .seg.draw { background: var(--gold); }
+.score-bar .seg.loss { background: var(--red); }
 .btn-icon {
   background: transparent; border: none; padding: 0 2px; font-size: 1.1rem; line-height: 1;
   cursor: pointer; color: var(--text-dim);

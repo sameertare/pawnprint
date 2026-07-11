@@ -19,6 +19,7 @@ export default defineConfig({
         analyze: page('./analyze.html'),
         live: page('./live.html'),
         swiss: page('./swiss.html'),
+        openingExplorer: page('./opening-explorer.html'),
         rating: page('./rating.html'),
         fideRating: page('./fide-rating.html'),
       },

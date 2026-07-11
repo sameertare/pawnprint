@@ -1,13 +1,14 @@
 # ♖ OpenFile
 
-A local-first chess toolkit with **five tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
+A local-first chess toolkit with **six tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
 
 | Page | Tool | What it does |
 |---|---|---|
-| `index.html` | **Hub** | Landing page linking to the five tools |
+| `index.html` | **Hub** | Landing page linking to the six tools |
 | `analyze.html` | **Performance Analysis** | Deep performance report from chess.com / lichess PGNs |
 | `live.html` | **Live & Engine** | Watch a live lichess game with move feedback; best-move suggestion from any position |
 | `swiss.html` | **Swiss Pairings** | Run a full Swiss tournament from a roster |
+| `opening-explorer.html` | **Opening Explorer** | Branching opening tree from your own PGNs, with master-game comparison |
 | `rating.html` | **USCF Rating Estimator** | Estimate a new US Chess rating after an event |
 | `fide-rating.html` | **FIDE Rating Estimator** | Estimate a new FIDE Standard rating after an event |
 
@@ -119,6 +120,8 @@ src/
   pwa.ts            service worker registration, shared by every page's entry module
   swissEngine.ts    pure Swiss logic: roster parsing, pairing, results, standings
   swiss.ts          Swiss Pairings UI
+  openingTree.ts    pure opening-tree logic: builds a move trie from games, aggregates W/D/L per node
+  openingExplorer.ts Opening Explorer UI (file load, player detection, tree navigation, master-game fetch)
   ratingEngine.ts   pure USCF rating-estimate logic
   rating.ts         USCF Rating Estimator UI
   fideRatingEngine.ts pure FIDE rating-estimate logic
@@ -190,7 +193,21 @@ The pairing engine (`src/swissEngine.ts`) is pure and framework-free. It has bee
 
 ---
 
-## Tool 4 — USCF Rating Estimator (`/rating.html`)
+## Tool 4 — Opening Explorer (`/opening-explorer.html`)
+
+Turns your own PGNs into a branching opening tree — like [openingtree.com](https://www.openingtree.com/), scoped to a v1: your own games in, no account/username fetch.
+
+- **Input:** drop PGN file(s) (or try the bundled sample). The main player is auto-detected the same way Performance Analysis does it (most frequent name across games, with casing/"Last, First"/nickname variants folded together) — no picking required.
+- **Tree:** built entirely client-side (`src/openingTree.ts`) by walking each game's move list into a trie, capped at 12 full moves (24 plies) — deeper transpositions rarely matter for repertoire prep. Every node tracks games/wins/draws/losses reached through it.
+- **Browsing:** a board (reusing the same `Board` component as Live & Engine) plus a clickable breadcrumb and a move-list table sorted by frequency, each row showing games played, score %, and a win/draw/loss bar. Click a move to drill in; **Back**/**Start**/flip to navigate.
+- **Filters:** color (White/Black — rebuilds the tree and flips the board), and a minimum-games threshold to hide rarely-played branches.
+- **Master-game comparison:** the same position's stats from the free [Lichess masters explorer API](https://lichess.org/api#tag/Opening-Explorer) shown alongside your own, so you can see where your repertoire diverges from master play. Degrades gracefully with an inline notice if that public API is unavailable — your own tree is unaffected either way.
+
+Not in v1 (noted as future work): username-based bulk game fetch from chess.com/lichess, opponent-prep mode (load someone else's games), and variant support — all real openingtree.com features, scoped out to keep this a focused first pass.
+
+---
+
+## Tool 5 — USCF Rating Estimator (`/rating.html`)
 
 Estimate a new US Chess (USCF) rating after an event, using the published rating formula.
 
@@ -203,7 +220,7 @@ This is an **unofficial estimate**, clearly labeled as such in the tool — US C
 
 ---
 
-## Tool 5 — FIDE Rating Estimator (`/fide-rating.html`)
+## Tool 6 — FIDE Rating Estimator (`/fide-rating.html`)
 
 Estimate a new FIDE **Standard** rating after an event (Rapid/Blitz use separate rating pools and aren't covered).
 

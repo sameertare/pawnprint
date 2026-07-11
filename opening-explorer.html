@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Opening Explorer — OpenFile</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♖</text></svg>" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#14181f" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html">♖ OpenFile</a>
+      <div class="navlinks">
+        <a href="index.html">🏠 Home</a>
+        <a href="analyze.html">Performance Analysis</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+        <a href="opening-explorer.html" class="active">Opening Explorer</a>
+        <a href="rating.html">USCF Rating</a>
+        <a href="fide-rating.html">FIDE Rating</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>🌳 Opening Explorer</h1>
+        <p class="tagline">Turn your own games into a branching opening tree — see how often you play each move and how you actually score from there, compared against master games.</p>
+      </header>
+
+      <section class="card" id="load-card">
+        <h2><span class="step">1</span> Load games</h2>
+        <div id="dropzone" class="dropzone">
+          <p><strong>Drop PGN files here</strong> — or</p>
+          <label class="btn btn-primary" for="file-input">Choose files</label>
+          <input type="file" id="file-input" multiple accept=".pgn,.txt" hidden />
+          <p class="hint">Multiple files supported. Nothing is uploaded — the tree is built entirely in your browser.</p>
+        </div>
+        <div id="file-summary" class="file-summary"></div>
+        <button id="load-sample" class="btn btn-ghost">…or try the bundled sample games</button>
+      </section>
+
+      <section class="card" id="config-card" hidden>
+        <h2><span class="step">2</span> Build the tree</h2>
+        <p class="hint">Building the tree for <b id="detected-player-name">—</b><span id="detected-player-count"></span> — the player who appears most across the loaded games.</p>
+        <div class="config-row">
+          <label>Color
+            <select id="color-select">
+              <option value="w">White</option>
+              <option value="b">Black</option>
+            </select>
+          </label>
+          <label>Hide branches with fewer than
+            <select id="mingames-select">
+              <option value="1">1 game</option>
+              <option value="2" selected>2 games</option>
+              <option value="3">3 games</option>
+              <option value="5">5 games</option>
+              <option value="10">10 games</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section id="results" hidden>
+        <div class="live-layout">
+          <div class="board-col">
+            <div id="board"></div>
+            <div class="nav-row">
+              <button id="root-btn" class="btn nav-btn" title="Back to start position">⏮ Start</button>
+              <button id="up-btn" class="btn nav-btn" title="One move back">◀ Back</button>
+              <button id="flip-btn" class="btn nav-btn" title="Flip board">⇅</button>
+            </div>
+            <div id="breadcrumb" class="breadcrumb"></div>
+            <div id="node-stats" class="summary-cards"></div>
+          </div>
+
+          <div class="side-col">
+            <section class="card">
+              <h2>Your moves from here</h2>
+              <div id="your-moves" class="games-table-wrap"></div>
+            </section>
+
+            <section class="card">
+              <h2>Master games from here <span class="hint">(Lichess masters database)</span></h2>
+              <div id="master-moves" class="games-table-wrap"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        OpenFile · tree built entirely in your browser · master-game comparison via the public Lichess explorer API
+      </footer>
+    </div>
+    <script type="module" src="/src/openingExplorer.ts"></script>
+  </body>
+</html>
