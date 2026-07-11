@@ -1,11 +1,11 @@
 import './style.css';
 import type { ParsedGame, ParseFailure } from './pgn';
-import { gameId, splitPgn, tryParseGame } from './pgn';
+import { gameId, gameLink, splitPgn, tryParseGame } from './pgn';
 import { groupPlayerNames, nameKey, inferOwnerColorFromTitle } from './playerMatch';
 import type { Color, Result } from './types';
 import { Board } from './board';
 import { buildTree, childSummaries, nodeAtPath, scorePct } from './openingTree';
-import type { TreeNode, ChildSummary } from './openingTree';
+import type { TreeNode, ChildSummary, GameRef } from './openingTree';
 import { registerServiceWorker } from './pwa';
 
 registerServiceWorker();
@@ -14,12 +14,13 @@ registerServiceWorker();
 let parsedGames: ParsedGame[] = [];
 let detectedUsername: string | null = null;
 let detectedMatchKeys: Set<string> | null = null;
-interface ExplorerGame { sans: string[]; color: Color; result: Result; }
+interface ExplorerGame { sans: string[]; color: Color; result: Result; opponent: string; link: string | null; date: string; }
 let explorerGames: ExplorerGame[] = [];
 let tree: TreeNode | null = null;
 let path: string[] = []; // SAN path from root to the currently viewed node
 let minGames = 2;
 let masterFetchToken = 0; // guards against a slow fetch resolving after the user navigated away
+const MAX_GAMES_SHOWN = 50; // cap the "games reaching this position" list for very popular nodes
 
 // ---------- dom ----------
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -36,6 +37,12 @@ const breadcrumbEl = $('#breadcrumb');
 const nodeStatsEl = $('#node-stats');
 const yourMovesEl = $('#your-moves');
 const masterMovesEl = $('#master-moves');
+const gamesHereEl = $('#games-here');
+const gamesHereCountEl = $('#games-here-count');
+const lichessUsernameInput = $('#lichess-username') as HTMLInputElement;
+const lichessMaxSelect = $('#lichess-max') as HTMLSelectElement;
+const lichessFetchBtn = $('#lichess-fetch-btn') as HTMLButtonElement;
+const lichessStatusEl = $('#lichess-status');
 
 const board = new Board($('#board'));
 
@@ -44,7 +51,7 @@ function esc(s: string): string {
 }
 
 // ---------- file loading (same pattern as Performance Analysis) ----------
-async function handleFiles(files: FileList | File[]) {
+async function handleFiles(files: FileList | File[], forceUsername?: string) {
   let newGames = 0;
   let failed = 0;
   const failureCounts = new Map<string, { count: number; sample: string }>();
@@ -90,21 +97,29 @@ async function handleFiles(files: FileList | File[]) {
   }
   fileSummary.innerHTML = html;
 
-  if (parsedGames.length) {
-    const detected = detectMainPlayer();
-    detectedUsername = detected?.name ?? null;
-    detectedMatchKeys = detected?.matchKeys ?? null;
-    detectedPlayerName.textContent = detectedUsername ?? '—';
+  finalizeAfterLoad(forceUsername);
+}
 
-    explorerGames = detectedMatchKeys ? buildExplorerGames(detectedMatchKeys) : [];
-    detectedPlayerCount.textContent = explorerGames.length
-      ? ` — ${explorerGames.length} game${explorerGames.length === 1 ? '' : 's'} available`
-      : '';
+/** Sets the detected player (auto-detected, or forced to a known lichess username) and rebuilds
+ *  everything downstream. Split out from handleFiles so the lichess-fetch flow — which already
+ *  knows exactly whose account it fetched — can skip the frequency heuristic entirely. */
+function finalizeAfterLoad(forceUsername?: string) {
+  if (!parsedGames.length) return;
+  const detected = forceUsername
+    ? { name: forceUsername, matchKeys: new Set([nameKey(forceUsername)]) }
+    : detectMainPlayer();
+  detectedUsername = detected?.name ?? null;
+  detectedMatchKeys = detected?.matchKeys ?? null;
+  detectedPlayerName.textContent = detectedUsername ?? '—';
 
-    configCard.hidden = false;
-    configCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    rebuildAndRender();
-  }
+  explorerGames = detectedMatchKeys ? buildExplorerGames(detectedMatchKeys) : [];
+  detectedPlayerCount.textContent = explorerGames.length
+    ? ` — ${explorerGames.length} game${explorerGames.length === 1 ? '' : 's'} available`
+    : '';
+
+  configCard.hidden = false;
+  configCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  rebuildAndRender();
 }
 
 /** Same heuristic as Performance Analysis: the player appearing in the most games, with name
@@ -126,7 +141,7 @@ function detectMainPlayer(): { name: string; count: number; matchKeys: Set<strin
 }
 
 /** Same color/result derivation as analyzeGame() in analyze.ts, minus the engine-analysis parts
- *  this tool doesn't need. */
+ *  this tool doesn't need, plus opponent name/link/date for the per-position games list. */
 function buildExplorerGames(matchKeys: Set<string>): ExplorerGame[] {
   const out: ExplorerGame[] = [];
   for (const g of parsedGames) {
@@ -149,7 +164,15 @@ function buildExplorerGames(matchKeys: Set<string>): ExplorerGame[] {
     else if (resultRaw === '0-1') result = userIsWhite ? 'loss' : 'win';
     else if (resultRaw === '1/2-1/2') result = 'draw';
     else result = 'unknown';
-    out.push({ sans: g.moves.map((m) => m.san), color, result });
+    const opponent = (userIsWhite ? h['Black'] : h['White']) || 'Unknown';
+    out.push({
+      sans: g.moves.map((m) => m.san),
+      color,
+      result,
+      opponent,
+      link: gameLink(h),
+      date: h['Date'] ?? h['UTCDate'] ?? '',
+    });
   }
   return out;
 }
@@ -171,6 +194,42 @@ $('#load-sample').addEventListener('click', async () => {
   const file = new File([text], 'sample-games.pgn');
   await handleFiles([file]);
 });
+
+// ---------- lichess username bulk fetch ----------
+lichessFetchBtn.addEventListener('click', () => void fetchFromLichess());
+lichessUsernameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void fetchFromLichess();
+});
+
+async function fetchFromLichess() {
+  const username = lichessUsernameInput.value.trim();
+  if (!username) {
+    lichessStatusEl.textContent = 'Enter a lichess username first.';
+    return;
+  }
+  const max = lichessMaxSelect.value;
+  lichessFetchBtn.disabled = true;
+  lichessStatusEl.textContent = `Fetching up to ${max} games for ${username} from lichess… this can take a moment for larger counts.`;
+  try {
+    const url = `https://lichess.org/api/games/user/${encodeURIComponent(username)}?max=${max}&pgnInJson=false&clocks=false&evals=false&opening=false`;
+    const resp = await fetch(url, { headers: { Accept: 'application/x-chess-pgn' } });
+    if (resp.status === 404) throw new Error(`No lichess account named "${username}" found.`);
+    if (resp.status === 429) throw new Error('Lichess is rate-limiting this request — wait a minute and try again.');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    if (!text.trim()) {
+      lichessStatusEl.textContent = `${username} has no games matching this request.`;
+      return;
+    }
+    const file = new File([text], `${username}-lichess.pgn`);
+    await handleFiles([file], username);
+    lichessStatusEl.textContent = `Loaded games for ${username} from lichess.`;
+  } catch (e) {
+    lichessStatusEl.textContent = `Could not fetch from lichess: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    lichessFetchBtn.disabled = false;
+  }
+}
 
 // ---------- tree building & navigation ----------
 colorSelect.addEventListener('change', () => {
@@ -242,6 +301,7 @@ function render() {
     });
   });
 
+  renderGamesHere(node);
   void renderMasterMoves(node.fen);
 }
 
@@ -268,6 +328,55 @@ function movesTableHtml(children: ChildSummary[], clickable: boolean): string {
     })
     .join('');
   return `<table><thead><tr><th>Move</th><th class="num">Games</th><th class="num">Score</th><th>W/D/L</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/** Formats a SAN list as a readable move-number-prefixed string, e.g. "1. e4 e5 2. Nf3 Nc6". */
+function formatMoves(sans: string[]): string {
+  const parts: string[] = [];
+  for (let i = 0; i < sans.length; i++) {
+    if (i % 2 === 0) parts.push(`${i / 2 + 1}.`);
+    parts.push(sans[i]);
+  }
+  return parts.join(' ');
+}
+
+/** Lists the individual games that reached the current node — opponent, result, date, a link to
+ *  the game if the PGN had one, and the full move list on demand. Matches openingtree.com's
+ *  per-position games list. */
+function renderGamesHere(node: TreeNode) {
+  const refs = node.gameRefs;
+  gamesHereCountEl.textContent = refs.length ? `(${refs.length})` : '';
+  if (!refs.length) {
+    gamesHereEl.innerHTML = `<p class="hint">No games reached this position.</p>`;
+    return;
+  }
+  const shown = refs.slice(0, MAX_GAMES_SHOWN);
+  const resultLabel = (r: Result) => (r === 'win' ? 'Win' : r === 'loss' ? 'Loss' : r === 'draw' ? 'Draw' : '—');
+  const resultClass = (r: Result) => (r === 'win' ? 'pos' : r === 'loss' ? 'neg' : r === 'draw' ? 'mid' : '');
+  const rows = shown
+    .map((g, i) => `
+      <tr>
+        <td>${esc(g.opponent)}</td>
+        <td class="${resultClass(g.result)}">${resultLabel(g.result)}</td>
+        <td class="hint">${esc(g.date || '—')}</td>
+        <td>${g.link ? `<a href="${esc(g.link)}" target="_blank" rel="noopener">View ↗</a>` : '<span class="hint">—</span>'}</td>
+        <td><button class="btn-icon moves-toggle" data-idx="${i}" title="Show moves">☰</button></td>
+      </tr>
+      <tr class="moves-row" id="moves-row-${i}" hidden>
+        <td colspan="5"><div class="game-moves"><p>${esc(formatMoves(g.sans))}</p></div></td>
+      </tr>`)
+    .join('');
+  const more = refs.length > MAX_GAMES_SHOWN
+    ? `<p class="hint" style="margin-top:8px;">+ ${refs.length - MAX_GAMES_SHOWN} more game(s) not shown.</p>`
+    : '';
+  gamesHereEl.innerHTML =
+    `<table><thead><tr><th>Opponent</th><th>Result</th><th>Date</th><th>Link</th><th></th></tr></thead><tbody>${rows}</tbody></table>${more}`;
+  gamesHereEl.querySelectorAll<HTMLButtonElement>('.moves-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const row = document.getElementById(`moves-row-${btn.dataset.idx}`) as HTMLElement;
+      row.hidden = !row.hidden;
+    });
+  });
 }
 
 // ---------- master-game comparison (Lichess masters database, public API) ----------

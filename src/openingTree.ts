@@ -12,6 +12,17 @@ const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
  *  and letting every game's full move list branch out would make the tree unusably wide. */
 export const MAX_TREE_PLY = 24; // 12 full moves
 
+/** One underlying game, attached to every tree node its move sequence passes through — the same
+ *  object reference is shared across nodes (cheap; not cloned), so a popular position can list
+ *  every individual game that reached it, not just the aggregate counts. */
+export interface GameRef {
+  opponent: string;
+  result: Result;
+  link: string | null;
+  date: string;
+  sans: string[]; // the full game's moves, not just the prefix up to this node
+}
+
 export interface TreeNode {
   fen: string; // position after the move that led here (root = start position)
   ply: number; // 0 at root
@@ -20,11 +31,15 @@ export interface TreeNode {
   draws: number;
   losses: number;
   children: Map<string, TreeNode>; // keyed by SAN
+  gameRefs: GameRef[]; // every underlying game that passed through this node
 }
 
 export interface TreeGame {
   sans: string[];
   result: Result; // already from the color being explored's perspective
+  opponent: string;
+  link: string | null;
+  date: string;
 }
 
 export interface ChildSummary {
@@ -38,15 +53,16 @@ export interface ChildSummary {
 }
 
 function newNode(fen: string, ply: number): TreeNode {
-  return { fen, ply, games: 0, wins: 0, draws: 0, losses: 0, children: new Map() };
+  return { fen, ply, games: 0, wins: 0, draws: 0, losses: 0, children: new Map(), gameRefs: [] };
 }
 
-function tally(node: TreeNode, result: Result) {
+function tally(node: TreeNode, result: Result, ref: GameRef) {
   node.games++;
   if (result === 'win') node.wins++;
   else if (result === 'loss') node.losses++;
   else if (result === 'draw') node.draws++;
   // 'unknown' games are excluded from the input list entirely (see buildTree), so never reach here.
+  node.gameRefs.push(ref);
 }
 
 /** Builds the tree from games already filtered to one color and one player. Games with an
@@ -55,7 +71,8 @@ export function buildTree(games: TreeGame[], maxPly = MAX_TREE_PLY): TreeNode {
   const root = newNode(START_FEN, 0);
   for (const g of games) {
     if (g.result === 'unknown') continue;
-    tally(root, g.result);
+    const ref: GameRef = { opponent: g.opponent, result: g.result, link: g.link, date: g.date, sans: g.sans };
+    tally(root, g.result, ref);
     const chess = new Chess();
     let node = root;
     const limit = Math.min(g.sans.length, maxPly);
@@ -73,7 +90,7 @@ export function buildTree(games: TreeGame[], maxPly = MAX_TREE_PLY): TreeNode {
         child = newNode(chess.fen(), i + 1);
         node.children.set(san, child);
       }
-      tally(child, g.result);
+      tally(child, g.result, ref);
       node = child;
     }
   }

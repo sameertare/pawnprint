@@ -195,15 +195,16 @@ The pairing engine (`src/swissEngine.ts`) is pure and framework-free. It has bee
 
 ## Tool 4 — Opening Explorer (`/opening-explorer.html`)
 
-Turns your own PGNs into a branching opening tree — like [openingtree.com](https://www.openingtree.com/), scoped to a v1: your own games in, no account/username fetch.
+Turns your own PGNs into a branching opening tree — like [openingtree.com](https://www.openingtree.com/).
 
-- **Input:** drop PGN file(s) (or try the bundled sample). The main player is auto-detected the same way Performance Analysis does it (most frequent name across games, with casing/"Last, First"/nickname variants folded together) — no picking required.
-- **Tree:** built entirely client-side (`src/openingTree.ts`) by walking each game's move list into a trie, capped at 12 full moves (24 plies) — deeper transpositions rarely matter for repertoire prep. Every node tracks games/wins/draws/losses reached through it.
+- **Input:** drop PGN file(s), try the bundled sample, or **fetch a lichess account's games directly by username** (`GET lichess.org/api/games/user/:username`, streamed as PGN — no auth needed for public games). The main player is auto-detected the same way Performance Analysis does it (most frequent name across games, with casing/"Last, First"/nickname variants folded together) — no picking required; a lichess-username fetch skips the heuristic entirely and attributes every game to that account directly.
+- **Tree:** built entirely client-side (`src/openingTree.ts`) by walking each game's move list into a trie, capped at 12 full moves (24 plies) — deeper transpositions rarely matter for repertoire prep. Every node tracks games/wins/draws/losses reached through it, plus a reference to every underlying game that passed through (shared object references, not clones — cheap even for a large tree).
 - **Browsing:** a board (reusing the same `Board` component as Live & Engine) plus a clickable breadcrumb and a move-list table sorted by frequency, each row showing games played, score %, and a win/draw/loss bar. Click a move to drill in; **Back**/**Start**/flip to navigate.
 - **Filters:** color (White/Black — rebuilds the tree and flips the board), and a minimum-games threshold to hide rarely-played branches.
+- **Games reaching this position:** every individual game behind the current node — opponent, result, date, a link to the game if the PGN had one, and an expandable full move list. Capped at 50 rows for very popular positions (with a "+N more" note), same as openingtree.com's per-position games list.
 - **Master-game comparison:** the same position's stats from the free [Lichess masters explorer API](https://lichess.org/api#tag/Opening-Explorer) shown alongside your own, so you can see where your repertoire diverges from master play. Degrades gracefully with an inline notice if that public API is unavailable — your own tree is unaffected either way.
 
-Not in v1 (noted as future work): username-based bulk game fetch from chess.com/lichess, opponent-prep mode (load someone else's games), and variant support — all real openingtree.com features, scoped out to keep this a focused first pass.
+Not in v1 (noted as future work): opponent-prep mode (load someone else's account to see their repertoire) and variant support — real openingtree.com features, scoped out to keep this focused.
 
 ---
 

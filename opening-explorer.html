@@ -38,6 +38,25 @@
         </div>
         <div id="file-summary" class="file-summary"></div>
         <button id="load-sample" class="btn btn-ghost">…or try the bundled sample games</button>
+
+        <div class="lichess-fetch">
+          <p class="hint" style="margin:14px 0 8px;"><strong>…or fetch a lichess account's games directly</strong></p>
+          <div class="config-row">
+            <label>Lichess username
+              <input type="text" id="lichess-username" class="text-input" placeholder="e.g. DrNykterstein" />
+            </label>
+            <label>Max games
+              <select id="lichess-max">
+                <option value="100">100</option>
+                <option value="200" selected>200</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+              </select>
+            </label>
+            <button id="lichess-fetch-btn" class="btn btn-primary">Fetch from lichess</button>
+          </div>
+          <div id="lichess-status" class="hint"></div>
+        </div>
       </section>
 
       <section class="card" id="config-card" hidden>
@@ -84,6 +103,11 @@
             <section class="card">
               <h2>Master games from here <span class="hint">(Lichess masters database)</span></h2>
               <div id="master-moves" class="games-table-wrap"></div>
+            </section>
+
+            <section class="card">
+              <h2>Games reaching this position <span id="games-here-count" class="hint"></span></h2>
+              <div id="games-here" class="games-table-wrap"></div>
             </section>
           </div>
         </div>

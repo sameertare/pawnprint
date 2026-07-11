@@ -146,10 +146,17 @@ export function parseGame(chunk: string): ParsedGame | null {
   return tryParseGame(chunk).game;
 }
 
+/** A viewable game URL, if the PGN's Link/Site header actually is one (chess.com and lichess both
+ *  put it there; other sources often put a non-URL label like "Chess.com" in Site instead). */
+export function gameLink(headers: Record<string, string>): string | null {
+  const link = headers['Link'] || headers['Site'];
+  return link && /^https?:\/\//.test(link) ? link : null;
+}
+
 /** Stable id for deduping across sessions: prefer the game URL, else a content hash. */
 export function gameId(g: ParsedGame): string {
-  const link = g.headers['Link'] || g.headers['Site'];
-  if (link && /^https?:\/\//.test(link)) return link;
+  const link = gameLink(g.headers);
+  if (link) return link;
   const key = [
     g.headers['Date'] ?? '',
     g.headers['White'] ?? '',
