@@ -1,14 +1,15 @@
 # ♖ OpenFile
 
-A local-first chess toolkit with **six tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
+A local-first chess toolkit with **seven tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
 
 | Page | Tool | What it does |
 |---|---|---|
-| `index.html` | **Hub** | Landing page linking to the six tools |
+| `index.html` | **Hub** | Landing page linking to the seven tools |
 | `analyze.html` | **Performance Analysis** | Deep performance report from chess.com / lichess PGNs |
 | `live.html` | **Live & Engine** | Watch a live lichess game with move feedback; best-move suggestion from any position |
 | `swiss.html` | **Swiss Pairings** | Run a full Swiss tournament from a roster |
 | `opening-explorer.html` | **Opening Explorer** | Branching opening tree from your own PGNs |
+| `compare-reports.html` | **Compare Reports** | Side-by-side metric delta between two saved Performance Analysis reports |
 | `rating.html` | **USCF Rating Estimator** | Estimate a new US Chess rating after an event |
 | `fide-rating.html` | **FIDE Rating Estimator** | Estimate a new FIDE Standard rating after an event |
 
@@ -102,7 +103,7 @@ Prefer the backend features (server report storage) live too? Deploy the whole t
 ## Project layout
 
 ```
-index.html / analyze.html / live.html / swiss.html / rating.html / fide-rating.html   the six pages (Vite multi-page build)
+index.html / analyze.html / live.html / swiss.html / opening-explorer.html / compare-reports.html / rating.html / fide-rating.html   the seven pages (Vite multi-page build)
 src/
   types.ts          shared data model (also the shape persisted in the .md)
   pgn.ts            multi-game PGN splitting & parsing, eval/clock tag extraction
@@ -122,6 +123,8 @@ src/
   swiss.ts          Swiss Pairings UI
   openingTree.ts    pure opening-tree logic: builds a move trie from games, aggregates W/D/L per node
   openingExplorer.ts Opening Explorer UI (file load, player detection, tree navigation)
+  reportCompare.ts  pure report-comparison logic: builds delta rows/direction for every aggregate metric
+  compareReports.ts Compare Reports UI (two-file upload, delta tables, opening-by-opening diff)
   ratingEngine.ts   pure USCF rating-estimate logic
   rating.ts         USCF Rating Estimator UI
   fideRatingEngine.ts pure FIDE rating-estimate logic
@@ -208,7 +211,20 @@ Not in v1 (noted as future work): variant support and master-game comparison —
 
 ---
 
-## Tool 5 — USCF Rating Estimator (`/rating.html`)
+## Tool 5 — Compare Reports (`/compare-reports.html`)
+
+Upload two saved Performance Analysis `report.md` files and see every metric compared side by side, with the delta highlighted.
+
+- **Input:** two independent drop zones, Report A (baseline) and Report B (compare against) — each takes a single saved `report.md`. A file that doesn't contain the embedded `chess-insight:data:v1` block is rejected with an inline error and clears that slot (a failed re-upload never leaves a stale comparison from a previous successful load showing).
+- **What's compared:** the exact same aggregates Performance Analysis computes (`src/aggregate.ts`) for each report — overview score/games/accuracy, by-color (White/Black) breakdowns, by-time-control tables, per-phase (opening/middlegame/endgame) accuracy and errors, tactics (missed wins/mates/tactics, blunders), patterns (conversion rate, thrown wins, saves, time-pressure blunders), and an opening-by-opening score comparison matched by opening family — openings present in only one report are marked "(only in A)" / "(only in B)" rather than silently dropped.
+- **Delta semantics:** every row is colored green/red based on whether B is better or worse than A for *that specific metric* — e.g. a drop in losses or blunder rate is green (good), a drop in accuracy or score % is red (bad); count-only rows with no inherent direction (like game counts) are left uncolored. Tactics counts are normalized to **per-game rates** for the purpose of coloring (so a report with far more games isn't unfairly flagged worse just for having more raw blunders) — the raw counts are still shown alongside, uncolored, for reference.
+- **Mismatched players:** if the two reports have different usernames, comparison still runs (useful for comparing two different players, e.g. scouting), but a warning banner calls it out so it's not mistaken for a progress-over-time comparison by accident.
+
+Pure comparison logic lives in `src/reportCompare.ts` (no DOM), separate from the `src/compareReports.ts` UI controller — same split used by Opening Explorer and the rating estimators.
+
+---
+
+## Tool 6 — USCF Rating Estimator (`/rating.html`)
 
 Estimate a new US Chess (USCF) rating after an event, using the published rating formula.
 
@@ -221,7 +237,7 @@ This is an **unofficial estimate**, clearly labeled as such in the tool — US C
 
 ---
 
-## Tool 6 — FIDE Rating Estimator (`/fide-rating.html`)
+## Tool 7 — FIDE Rating Estimator (`/fide-rating.html`)
 
 Estimate a new FIDE **Standard** rating after an event (Rapid/Blitz use separate rating pools and aren't covered).
 

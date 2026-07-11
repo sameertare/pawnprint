@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compare Reports — OpenFile</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♖</text></svg>" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#14181f" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html">♖ OpenFile</a>
+      <div class="navlinks">
+        <a href="index.html">🏠 Home</a>
+        <a href="analyze.html">Performance Analysis</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+        <a href="opening-explorer.html">Opening Explorer</a>
+        <a href="compare-reports.html" class="active">Compare Reports</a>
+        <a href="rating.html">USCF Rating</a>
+        <a href="fide-rating.html">FIDE Rating</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>⚖ Compare Reports</h1>
+        <p class="tagline">Upload two saved Performance Analysis reports and see exactly what changed — every metric, side by side, with the delta highlighted.</p>
+      </header>
+
+      <section class="card" id="load-card">
+        <h2><span class="step">1</span> Load two reports</h2>
+        <p class="hint">Both must be <code>report.md</code> files downloaded from Performance Analysis — e.g. one from last month and one from today, to see how you've progressed.</p>
+        <div class="compare-upload-grid">
+          <div class="compare-slot">
+            <h3>Report A <span class="hint">(baseline)</span></h3>
+            <div id="dropzone-a" class="dropzone">
+              <p><strong>Drop report.md here</strong> — or</p>
+              <label class="btn btn-primary" for="file-a">Choose file</label>
+              <input type="file" id="file-a" accept=".md" hidden />
+            </div>
+            <div id="summary-a" class="file-summary"></div>
+          </div>
+          <div class="compare-slot">
+            <h3>Report B <span class="hint">(compare against)</span></h3>
+            <div id="dropzone-b" class="dropzone">
+              <p><strong>Drop report.md here</strong> — or</p>
+              <label class="btn btn-primary" for="file-b">Choose file</label>
+              <input type="file" id="file-b" accept=".md" hidden />
+            </div>
+            <div id="summary-b" class="file-summary"></div>
+          </div>
+        </div>
+        <div id="load-error" class="neg" style="margin-top:10px;"></div>
+      </section>
+
+      <section id="results" hidden>
+        <div class="card" id="header-card"></div>
+        <div class="card">
+          <h2>Overview</h2>
+          <div id="overview-table"></div>
+        </div>
+        <div class="card">
+          <h2>By color</h2>
+          <div class="compare-two-col">
+            <div><h3>As White</h3><div id="white-table"></div></div>
+            <div><h3>As Black</h3><div id="black-table"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>By time control</h2>
+          <div id="timeclass-tables"></div>
+        </div>
+        <div class="card">
+          <h2>Game-phase accuracy &amp; errors</h2>
+          <div id="phase-tables"></div>
+        </div>
+        <div class="card">
+          <h2>Tactics &amp; errors</h2>
+          <div id="tactics-table"></div>
+        </div>
+        <div class="card">
+          <h2>Patterns</h2>
+          <div id="patterns-table"></div>
+        </div>
+        <div class="card">
+          <h2>Openings</h2>
+          <p class="hint">Openings played in both reports show a score delta. Openings only in one report are marked new/dropped.</p>
+          <div id="openings-table"></div>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        OpenFile · comparison runs entirely in your browser · nothing is uploaded anywhere
+      </footer>
+    </div>
+    <script type="module" src="/src/compareReports.ts"></script>
+  </body>
+</html>
