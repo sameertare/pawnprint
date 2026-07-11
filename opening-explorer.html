@@ -25,11 +25,17 @@
     <div id="app">
       <header class="app-header">
         <h1>🌳 Opening Explorer</h1>
-        <p class="tagline">Turn your own games into a branching opening tree — see how often you play each move and how you actually score from there.</p>
+        <p class="tagline">Turn your own games into a branching opening tree — see how often you play each move and how you actually score from there. Or scout an opponent's account the same way, before you play them.</p>
       </header>
 
+      <div class="tabbar">
+        <button class="tab active" data-mode="me">🧑 My Repertoire</button>
+        <button class="tab" data-mode="opponent">🎯 Opponent Prep</button>
+      </div>
+      <p id="profile-status" class="hint" style="margin:-8px 0 18px;"></p>
+
       <section class="card" id="load-card">
-        <h2><span class="step">1</span> Load games</h2>
+        <h2><span class="step">1</span> <span id="load-card-title">Load games</span></h2>
         <div id="dropzone" class="dropzone">
           <p><strong>Drop PGN files here</strong> — or</p>
           <label class="btn btn-primary" for="file-input">Choose files</label>

@@ -11,11 +11,25 @@ import { registerServiceWorker } from './pwa';
 registerServiceWorker();
 
 // ---------- state ----------
-let parsedGames: ParsedGame[] = [];
-let detectedUsername: string | null = null;
-let detectedMatchKeys: Set<string> | null = null;
 interface ExplorerGame { sans: string[]; color: Color; result: Result; opponent: string; link: string | null; date: string; }
-let explorerGames: ExplorerGame[] = [];
+
+/** "My Repertoire" and "Opponent Prep" are two fully independent loaded datasets sharing the same
+ *  UI chrome — switching tabs swaps which profile the load controls, tree, and browsing panels
+ *  operate on, without losing whatever's loaded in the other one. */
+interface Profile {
+  parsedGames: ParsedGame[];
+  username: string | null;
+  matchKeys: Set<string> | null;
+  explorerGames: ExplorerGame[];
+}
+function newProfile(): Profile {
+  return { parsedGames: [], username: null, matchKeys: null, explorerGames: [] };
+}
+type Mode = 'me' | 'opponent';
+let mode: Mode = 'me';
+const profiles: Record<Mode, Profile> = { me: newProfile(), opponent: newProfile() };
+function active(): Profile { return profiles[mode]; }
+
 let tree: TreeNode | null = null;
 let path: string[] = []; // SAN path from root to the currently viewed node
 let minGames = 2;
@@ -26,6 +40,8 @@ const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as
 const fileInput = $('#file-input') as HTMLInputElement;
 const dropzone = $('#dropzone');
 const fileSummary = $('#file-summary');
+const loadCardTitle = $('#load-card-title');
+const profileStatusEl = $('#profile-status');
 const configCard = $('#config-card');
 const detectedPlayerName = $('#detected-player-name');
 const detectedPlayerCount = $('#detected-player-count');
@@ -52,9 +68,47 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
+// ---------- mode switching ----------
+document.querySelectorAll<HTMLButtonElement>('.tab[data-mode]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    mode = btn.dataset.mode as Mode;
+    document.querySelectorAll('.tab[data-mode]').forEach((b) => b.classList.toggle('active', b === btn));
+    syncUiToActiveProfile();
+  });
+});
+
+function profileSummary(p: Profile, label: string): string {
+  if (!p.username) return `${label}: not loaded yet`;
+  return `${label}: <b>${esc(p.username)}</b> — ${p.explorerGames.length} game${p.explorerGames.length === 1 ? '' : 's'}`;
+}
+
+/** Reflects whichever profile is now active into every piece of UI that depends on it — called on
+ *  tab switch and after any load/fetch completes. */
+function syncUiToActiveProfile() {
+  const p = active();
+  loadCardTitle.textContent = mode === 'me' ? 'Load your games' : "Load the opponent's games";
+  profileStatusEl.innerHTML = `${profileSummary(profiles.me, '🧑 My Repertoire')} &nbsp;·&nbsp; ${profileSummary(profiles.opponent, '🎯 Opponent Prep')}`;
+
+  fileSummary.innerHTML = p.parsedGames.length ? `<span class="chip">♟ ${p.parsedGames.length} game(s) loaded</span>` : '';
+  detectedPlayerName.textContent = p.username ?? '—';
+  detectedPlayerCount.textContent = p.explorerGames.length
+    ? ` — ${p.explorerGames.length} game${p.explorerGames.length === 1 ? '' : 's'} available`
+    : '';
+  lichessStatusEl.textContent = '';
+  chesscomStatusEl.textContent = '';
+
+  if (p.explorerGames.length) {
+    configCard.hidden = false;
+    rebuildAndRender();
+  } else {
+    configCard.hidden = true;
+    resultsEl.hidden = true;
+  }
+}
+
 // ---------- file loading (same pattern as Performance Analysis) ----------
 async function handleFiles(files: FileList | File[], forceUsername?: string) {
-  let newGames = 0;
+  const p = active();
   let failed = 0;
   const failureCounts = new Map<string, { count: number; sample: string }>();
   const recordFailure = (f: ParseFailure) => {
@@ -69,8 +123,7 @@ async function handleFiles(files: FileList | File[], forceUsername?: string) {
     for (const chunk of chunks) {
       const { game, error } = tryParseGame(chunk);
       if (game) {
-        parsedGames.push(game);
-        newGames++;
+        p.parsedGames.push(game);
       } else {
         failed++;
         if (error) recordFailure(error);
@@ -78,17 +131,15 @@ async function handleFiles(files: FileList | File[], forceUsername?: string) {
     }
   }
   const seen = new Set<string>();
-  parsedGames = parsedGames.filter((g) => {
+  p.parsedGames = p.parsedGames.filter((g) => {
     const id = gameId(g);
     if (seen.has(id)) return false;
     seen.add(id);
     return true;
   });
 
-  const chips: string[] = [];
-  if (parsedGames.length) chips.push(`<span class="chip">♟ ${parsedGames.length} game(s) loaded</span>`);
-  if (failed) chips.push(`<span class="chip">⚠ ${failed} item(s) could not be parsed</span>`);
-  let html = chips.join(' ');
+  let html = p.parsedGames.length ? `<span class="chip">♟ ${p.parsedGames.length} game(s) loaded</span>` : '';
+  if (failed) html += ` <span class="chip">⚠ ${failed} item(s) could not be parsed</span>`;
   if (failureCounts.size) {
     const rows = [...failureCounts.entries()]
       .sort((a, b) => b[1].count - a[1].count)
@@ -102,31 +153,28 @@ async function handleFiles(files: FileList | File[], forceUsername?: string) {
   finalizeAfterLoad(forceUsername);
 }
 
-/** Sets the detected player (auto-detected, or forced to a known lichess username) and rebuilds
- *  everything downstream. Split out from handleFiles so the lichess-fetch flow — which already
- *  knows exactly whose account it fetched — can skip the frequency heuristic entirely. */
+/** Sets the detected player for the active profile (auto-detected, or forced to a known
+ *  username) and rebuilds everything downstream. Split out from handleFiles so the
+ *  lichess/chess.com fetch flows — which already know exactly whose account they fetched — can
+ *  skip the frequency heuristic entirely. */
 function finalizeAfterLoad(forceUsername?: string) {
-  if (!parsedGames.length) return;
+  const p = active();
+  if (!p.parsedGames.length) return;
   const detected = forceUsername
     ? { name: forceUsername, matchKeys: new Set([nameKey(forceUsername)]) }
-    : detectMainPlayer();
-  detectedUsername = detected?.name ?? null;
-  detectedMatchKeys = detected?.matchKeys ?? null;
-  detectedPlayerName.textContent = detectedUsername ?? '—';
-
-  explorerGames = detectedMatchKeys ? buildExplorerGames(detectedMatchKeys) : [];
-  detectedPlayerCount.textContent = explorerGames.length
-    ? ` — ${explorerGames.length} game${explorerGames.length === 1 ? '' : 's'} available`
-    : '';
+    : detectMainPlayer(p.parsedGames);
+  p.username = detected?.name ?? null;
+  p.matchKeys = detected?.matchKeys ?? null;
+  p.explorerGames = p.matchKeys ? buildExplorerGames(p.parsedGames, p.matchKeys) : [];
 
   configCard.hidden = false;
   configCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  rebuildAndRender();
+  syncUiToActiveProfile();
 }
 
 /** Same heuristic as Performance Analysis: the player appearing in the most games, with name
  *  variants (casing, "Last, First" order, nicknames) folded together. */
-function detectMainPlayer(): { name: string; count: number; matchKeys: Set<string> } | null {
+function detectMainPlayer(parsedGames: ParsedGame[]): { name: string; count: number; matchKeys: Set<string> } | null {
   const counts = new Map<string, number>();
   for (const g of parsedGames) {
     for (const key of ['White', 'Black'] as const) {
@@ -144,7 +192,7 @@ function detectMainPlayer(): { name: string; count: number; matchKeys: Set<strin
 
 /** Same color/result derivation as analyzeGame() in analyze.ts, minus the engine-analysis parts
  *  this tool doesn't need, plus opponent name/link/date for the per-position games list. */
-function buildExplorerGames(matchKeys: Set<string>): ExplorerGame[] {
+function buildExplorerGames(parsedGames: ParsedGame[], matchKeys: Set<string>): ExplorerGame[] {
   const out: ExplorerGame[] = [];
   for (const g of parsedGames) {
     const h = g.headers;
@@ -236,10 +284,12 @@ async function fetchFromLichess() {
 // ---------- chess.com username bulk fetch ----------
 // Chess.com's public "Published Data API" has no single all-games endpoint like lichess — games
 // are grouped into monthly archives, so this fetches the archive list, then the N most recent
-// months in parallel, and concatenates each game's own `pgn` field (already a complete PGN chunk,
-// Link header included) into one blob for the existing splitPgn/tryParseGame pipeline.
+// months in parallel, and concatenates each game's own `pgn` field (already a complete PGN chunk)
+// into one blob for the existing splitPgn/tryParseGame pipeline. Chess.com's own [Site] header is
+// never a URL ("Chess.com", not a link), so the game's separate `url` field is injected as a
+// [Link] header so gameLink() can still resolve a "View" link downstream.
 interface ChessComArchivesResponse { archives: string[]; }
-interface ChessComGamesResponse { games: { pgn?: string }[]; }
+interface ChessComGamesResponse { games: { pgn?: string; url?: string }[]; }
 
 chesscomFetchBtn.addEventListener('click', () => void fetchFromChessCom());
 chesscomUsernameInput.addEventListener('keydown', (e) => {
@@ -272,7 +322,9 @@ async function fetchFromChessCom() {
           const r = await fetch(url);
           if (!r.ok) return [];
           const data: ChessComGamesResponse = await r.json();
-          return (data.games ?? []).map((g) => g.pgn).filter((p): p is string => !!p);
+          return (data.games ?? [])
+            .filter((g): g is { pgn: string; url?: string } => !!g.pgn)
+            .map((g) => (g.url && !/\[Link /.test(g.pgn) ? `[Link "${g.url}"]\n${g.pgn}` : g.pgn));
         } catch {
           return []; // one bad month shouldn't sink the whole fetch
         }
@@ -306,7 +358,7 @@ minGamesSelect.addEventListener('change', () => {
 
 function rebuildAndRender() {
   const color = colorSelect.value as Color;
-  const games = explorerGames.filter((g) => g.color === color);
+  const games = active().explorerGames.filter((g) => g.color === color);
   tree = buildTree(games);
   path = [];
   board.setOrientation(color);
@@ -352,7 +404,7 @@ function render() {
     <div class="stat-card"><span class="big neg">${node.losses}</span><span class="label">Losses</span></div>
   `;
 
-  // Your moves from here
+  // Moves from here
   const children = childSummaries(node).filter((c) => c.games >= minGames);
   yourMovesEl.innerHTML = children.length
     ? movesTableHtml(children)
@@ -440,3 +492,5 @@ function renderGamesHere(node: TreeNode) {
     });
   });
 }
+
+syncUiToActiveProfile();
