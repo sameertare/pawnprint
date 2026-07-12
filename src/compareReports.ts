@@ -168,6 +168,11 @@ function tryRender() {
   $('#patterns-table').innerHTML = deltaRowsTableHtml(cmp.patterns);
   $('#openings-table').innerHTML = openingsTableHtml(cmp.openings);
 
+  const otcEl = $('#openings-by-timeclass-table');
+  otcEl.innerHTML = cmp.openingsByTimeClass.length
+    ? cmp.openingsByTimeClass.map((t) => `<h3>${esc(t.timeClass)}</h3>${openingsTableHtml(t.openings)}`).join('')
+    : '<p class="hint">No time-control data in either report.</p>';
+
   resultsEl.hidden = false;
   resultsEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }

@@ -67,6 +67,7 @@ export interface Aggregates {
   openingsByTimeClass: { timeClass: string; openings: OpeningRow[] }[];
   timeUsage: { moveNo: number; avgSec: number; games: number }[];
   errorsByMove: { moveNo: number; inaccuracies: number; mistakes: number; blunders: number }[];
+  repertoireCoverage: { preparedGames: number; improvisedGames: number; coveragePct: number | null };
   phases: PhaseStats[];
   overallAccuracy: number | null;
   tactics: {
@@ -190,6 +191,17 @@ export function aggregate(games: GameRecord[]): Aggregates {
   const byScore = [...ranked].sort((a, b) => scorePct(b) - scorePct(a) || b.games - a.games);
   const strongest = byScore.filter((o) => scorePct(o) >= 50).slice(0, 5);
   const weakest = [...byScore].reverse().filter((o) => scorePct(o) < 50).slice(0, 5);
+
+  // "Prepared" = an opening family played 2+ times (you've seen it before, presumably studied
+  // it); everything else is a one-off/improvised line. A rough read on how much of your results
+  // come from known prep vs. over-the-board improvisation.
+  const preparedGames = ranked.reduce((s, o) => s + o.games, 0);
+  const improvisedGames = games.length - preparedGames;
+  const repertoireCoverage = {
+    preparedGames,
+    improvisedGames,
+    coveragePct: games.length ? Math.round((preparedGames / games.length) * 1000) / 10 : null,
+  };
 
   const openingsByTimeClass = [...tcMap.entries()]
     .map(([timeClass, v]) => ({ timeClass, openings: computeOpenings(v.games) }))
@@ -339,6 +351,7 @@ export function aggregate(games: GameRecord[]): Aggregates {
     ),
     timeUsage,
     errorsByMove,
+    repertoireCoverage,
     phases, overallAccuracy, tactics, patterns, recommendations,
     analyzedCount: analyzed.length,
   };

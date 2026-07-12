@@ -105,6 +105,7 @@ export interface ComparisonSections {
   tactics: DeltaRow[];
   patterns: DeltaRow[];
   openings: OpeningDelta[];
+  openingsByTimeClass: { timeClass: string; openings: OpeningDelta[] }[];
 }
 
 function wdlRows(prefix: string, a: WDL, b: WDL): DeltaRow[] {
@@ -190,10 +191,23 @@ export function compareReports(a: Aggregates, b: Aggregates): ComparisonSections
     deltaRow('Games with clock data', p.clockGames, q.clockGames, 'neutral'),
   ];
 
-  const openings = compareOpenings(a.openings, b.openings).sort((x, y) => {
-    const bGames = (r: OpeningDelta) => (r.a?.games ?? 0) + (r.b?.games ?? 0);
-    return bGames(y) - bGames(x);
-  });
+  const byGamesDesc = (x: OpeningDelta, y: OpeningDelta) => {
+    const games = (r: OpeningDelta) => (r.a?.games ?? 0) + (r.b?.games ?? 0);
+    return games(y) - games(x);
+  };
+  const openings = compareOpenings(a.openings, b.openings).sort(byGamesDesc);
 
-  return { overview, byColorWhite, byColorBlack, byTimeClass, phases, tactics, patterns, openings };
+  const timeClassesForOpenings = new Set([
+    ...a.openingsByTimeClass.map((t) => t.timeClass),
+    ...b.openingsByTimeClass.map((t) => t.timeClass),
+  ]);
+  const openingsByTimeClass = [...timeClassesForOpenings]
+    .map((timeClass) => {
+      const aOpenings = a.openingsByTimeClass.find((t) => t.timeClass === timeClass)?.openings ?? [];
+      const bOpenings = b.openingsByTimeClass.find((t) => t.timeClass === timeClass)?.openings ?? [];
+      return { timeClass, openings: compareOpenings(aOpenings, bOpenings).sort(byGamesDesc) };
+    })
+    .filter((t) => t.openings.length > 0);
+
+  return { overview, byColorWhite, byColorBlack, byTimeClass, phases, tactics, patterns, openings, openingsByTimeClass };
 }

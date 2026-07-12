@@ -393,7 +393,18 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
     </div>`);
   }
 
+  const rc = a.repertoireCoverage;
   html.push(`<div class="card"><h2>♟ Opening performance</h2>
+    ${
+      rc.coveragePct !== null
+        ? `<div class="summary-cards">
+      <div class="stat-card"><span class="big">${rc.coveragePct}%</span><span class="label">Repertoire coverage</span></div>
+      <div class="stat-card"><span class="big">${rc.preparedGames}</span><span class="label">Games in a known line (2+ played)</span></div>
+      <div class="stat-card"><span class="big mid">${rc.improvisedGames}</span><span class="label">Games in a one-off line</span></div>
+    </div>
+    <p class="section-note">${rc.coveragePct}% of your games followed an opening you've played at least twice — a rough read on how much of your results come from actual prep vs. improvising over the board.</p>`
+        : ''
+    }
     <h3>Strongest openings</h3>${openingTableHtml(a.strongest, 'Need at least 2 games in an opening (with ≥50% score) to rank it.')}
     <h3>Weakest openings</h3>${openingTableHtml(a.weakest, 'No openings scoring below 50% with 2+ games — nice.')}
     <h3>All openings</h3>${openingTableHtml(a.openings, 'No games loaded.')}
