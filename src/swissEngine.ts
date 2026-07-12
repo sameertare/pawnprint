@@ -373,6 +373,36 @@ function pairBracket(pool: Player[]): { pairs: [Player, Player][]; floater: Play
   return { pairs: [], floater: pool[pool.length - 1] };
 }
 
+/** The earliest round number that hasn't been paired yet — the only rounds a bye request can
+ *  still affect, since pairNextRound() only ever reads byeRequests for the round it's about to
+ *  create. */
+export function nextRoundNumber(t: Tournament): number {
+  return t.rounds.length + 1;
+}
+
+/**
+ * Records a half-point bye request for `playerId` in a future round — e.g. a player who played
+ * round 1 now knows they'll be away for round 3. Only affects rounds not yet paired; requesting a
+ * bye for a round that's already been paired (or is in progress) is a no-op, since pairNextRound()
+ * only consults byeRequests at the moment it creates that round. Returns false if the round has
+ * already passed or the player wasn't found.
+ */
+export function requestByeForRound(t: Tournament, playerId: number, roundNo: number): boolean {
+  if (roundNo < nextRoundNumber(t)) return false;
+  const player = t.players.find((p) => p.id === playerId);
+  if (!player || player.withdrawn || player.isHouse) return false;
+  if (!player.byeRequests) player.byeRequests = [];
+  if (!player.byeRequests.includes(roundNo)) player.byeRequests.push(roundNo);
+  return true;
+}
+
+/** Cancels a not-yet-paired bye request, e.g. the player changed their mind before that round was paired. */
+export function cancelByeRequest(t: Tournament, playerId: number, roundNo: number): void {
+  const player = t.players.find((p) => p.id === playerId);
+  if (!player) return;
+  player.byeRequests = (player.byeRequests ?? []).filter((r) => r !== roundNo);
+}
+
 export function pairNextRound(t: Tournament): Round {
   const nextRoundNo = t.rounds.length + 1;
   const active = t.players.filter((p) => !p.withdrawn && !p.isHouse);

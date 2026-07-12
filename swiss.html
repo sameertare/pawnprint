@@ -86,6 +86,19 @@ Ian Nepomniachtchi 2758"></textarea>
         <div id="rounds"></div>
       </section>
 
+      <section class="card" id="bye-request-card" hidden>
+        <h2>Bye requests</h2>
+        <p class="hint">Check off any player asking for a half-point bye in an upcoming round — they'll sit out with 0.5 points instead of being paired when you next click "Pair next round" for that round.</p>
+        <div class="config-row" style="align-items:center;">
+          <label>Round
+            <select id="bye-round-select"></select>
+          </label>
+          <button id="add-bye-request-btn" class="btn">Add half-point bye</button>
+        </div>
+        <div id="bye-player-list" class="bye-player-list"></div>
+        <div id="pending-byes"></div>
+      </section>
+
       <section class="card" id="standings-card" hidden>
         <h2><span class="step">3</span> Standings</h2>
         <div id="standings"></div>

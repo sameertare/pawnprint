@@ -1,7 +1,8 @@
 import './style.css';
 import {
-  addExtraGameForBye, commitRound, createTournament, isNwchessRoster, pairNextRound, parseRoster,
-  recommendedRounds, setResult, standings,
+  addExtraGameForBye, cancelByeRequest, commitRound, createTournament, isNwchessRoster,
+  nextRoundNumber, pairNextRound, parseRoster, recommendedRounds, requestByeForRound, setResult,
+  standings,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
 import { registerServiceWorker } from './pwa';
@@ -280,6 +281,27 @@ $('#pair-btn').addEventListener('click', () => {
   renderAll();
 });
 
+// ---------- bye requests ----------
+$('#add-bye-request-btn').addEventListener('click', () => {
+  const t = cur();
+  if (!t) return;
+  const round = parseInt(($('#bye-round-select') as HTMLSelectElement).value, 10);
+  const checked = [...document.querySelectorAll<HTMLInputElement>('#bye-player-list input[type="checkbox"]:checked')];
+  if (!checked.length) return;
+  for (const box of checked) requestByeForRound(t, parseInt(box.dataset.pid!, 10), round);
+  save();
+  renderAll();
+});
+
+$('#pending-byes').addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('.cancel-bye-btn') as HTMLButtonElement | null;
+  const t = cur();
+  if (!btn || !t) return;
+  cancelByeRequest(t, parseInt(btn.dataset.pid!, 10), parseInt(btn.dataset.round!, 10));
+  save();
+  renderAll();
+});
+
 $('#reset-tourn').addEventListener('click', () => {
   if (confirm('Delete this event (all sections) and start over?')) {
     ev = null;
@@ -328,6 +350,7 @@ $('#print-btn').addEventListener('click', () => window.print());
 function renderAll() {
   const hasE = !!ev;
   ($('#control-card') as HTMLElement).hidden = !hasE;
+  ($('#bye-request-card') as HTMLElement).hidden = !hasE;
   ($('#setup-card') as HTMLElement).hidden = hasE;
   const t = cur();
   ($('#standings-card') as HTMLElement).hidden = !t || !t.rounds.length;
@@ -343,8 +366,40 @@ function renderAll() {
   $('#round-info').innerHTML = evLabel;
 
   renderRounds(t);
+  renderByeRequestCard(t);
   renderStandings(t);
   renderWallChart(t);
+}
+
+function renderByeRequestCard(t: Tournament) {
+  const nextRound = nextRoundNumber(t);
+  const roundSelect = $('#bye-round-select') as HTMLSelectElement;
+  const prevSelected = roundSelect.value ? parseInt(roundSelect.value, 10) : nextRound;
+  const roundOptions = Array.from({ length: 6 }, (_, i) => nextRound + i);
+  roundSelect.innerHTML = roundOptions.map((r) => `<option value="${r}">Round ${r}</option>`).join('');
+  roundSelect.value = String(roundOptions.includes(prevSelected) ? prevSelected : nextRound);
+
+  const active = t.players.filter((p) => !p.withdrawn && !p.isHouse).sort((a, b) => a.name.localeCompare(b.name));
+  $('#bye-player-list').innerHTML = active.length
+    ? active
+        .map(
+          (p) =>
+            `<label class="bye-player-item"><input type="checkbox" data-pid="${p.id}"> ${esc(p.name)}${p.rating ? ` (${p.rating})` : ''}</label>`
+        )
+        .join('')
+    : '<p class="hint">No active players.</p>';
+
+  const pending = active
+    .flatMap((p) => (p.byeRequests ?? []).filter((r) => r >= nextRound).map((r) => ({ player: p, round: r })))
+    .sort((a, b) => a.round - b.round || a.player.name.localeCompare(b.player.name));
+  $('#pending-byes').innerHTML = pending.length
+    ? `<h3>Pending bye requests</h3><ul class="pattern-list">${pending
+        .map(
+          ({ player, round }) =>
+            `<li>${esc(player.name)} — Round ${round} <button class="btn-icon cancel-bye-btn" data-pid="${player.id}" data-round="${round}" title="Cancel this bye request">✕</button></li>`
+        )
+        .join('')}</ul>`
+    : '';
 }
 
 function renderSectionTabs() {

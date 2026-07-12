@@ -159,6 +159,10 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .pattern-list { padding-left: 20px; }
 .pattern-list li { margin-bottom: 10px; }
 
+.bye-player-list { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
+.bye-player-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
+.pattern-list .cancel-bye-btn { margin-left: 4px; }
+
 .rec-card {
   border-left: 4px solid var(--blue);
   background: var(--bg-inset);
