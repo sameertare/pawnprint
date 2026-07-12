@@ -380,6 +380,94 @@ export function nextRoundNumber(t: Tournament): number {
   return t.rounds.length + 1;
 }
 
+function scoreBeforeRound(t: Tournament, playerId: number, roundNo: number): number {
+  let score = 0;
+  for (let r = 1; r < roundNo; r++) {
+    const round = t.rounds[r - 1];
+    if (!round) break;
+    const pr = round.pairings.find((p) => p.byeId === playerId || p.whiteId === playerId || p.blackId === playerId);
+    if (!pr) continue;
+    if (pr.byeId === playerId) { score += pr.byePoints ?? 1; continue; }
+    const isWhite = pr.whiteId === playerId;
+    if (pr.result === '1-0') score += isWhite ? 1 : 0;
+    else if (pr.result === '0-1') score += isWhite ? 0 : 1;
+    else if (pr.result === '1/2-1/2') score += 0.5;
+  }
+  return Math.round(score * 10) / 10;
+}
+
+/** Colors actually played in real games before `roundNo`, read from the round pairings directly
+ *  rather than trusting player.colors (which byes don't push to, so it can drift out of
+ *  round-index alignment for a player who's had one). */
+function colorHistoryBeforeRound(t: Tournament, playerId: number, roundNo: number): Color[] {
+  const hist: Color[] = [];
+  for (let r = 1; r < roundNo; r++) {
+    const round = t.rounds[r - 1];
+    if (!round) break;
+    const pr = round.pairings.find((p) => p.whiteId === playerId || p.blackId === playerId);
+    if (pr) hist.push(pr.whiteId === playerId ? 'w' : 'b');
+  }
+  return hist;
+}
+
+function priorMeetingRound(t: Tournament, aId: number, bId: number, beforeRound: number): number | null {
+  for (let r = 1; r < beforeRound; r++) {
+    const round = t.rounds[r - 1];
+    if (!round) break;
+    const pr = round.pairings.find(
+      (p) => p.byeId == null && ((p.whiteId === aId && p.blackId === bId) || (p.whiteId === bId && p.blackId === aId))
+    );
+    if (pr) return r;
+  }
+  return null;
+}
+
+/**
+ * Human-readable reasons a board (or bye) was paired the way it was — score-group membership,
+ * color-balance history, and rematch status. Reconstructed after the fact from the tournament's
+ * round history rather than the pairing algorithm's internal trace, so it states the objective
+ * facts of the match-up (in the spirit of SwissSys's pairing explanations) rather than every
+ * tiebreak the algorithm weighed internally. Works for any round, not just the latest.
+ */
+export function explainPairing(t: Tournament, roundNo: number, board: number): string[] {
+  const round = t.rounds[roundNo - 1];
+  if (!round) return [];
+  const pr = round.pairings.find((p) => p.board === board);
+  if (!pr) return [];
+  const byId = new Map(t.players.map((p) => [p.id, p]));
+
+  if (pr.byeId != null) {
+    const p = byId.get(pr.byeId);
+    if (!p) return [];
+    const score = scoreBeforeRound(t, p.id, roundNo);
+    const requested = (pr.byePoints ?? 1) === 0.5;
+    return [
+      requested
+        ? `${p.name} requested to sit out Round ${roundNo} and received a half-point bye.`
+        : `${p.name} received the round's bye — the lowest-standing player (by score, then rating) who hadn't already had one, needed because the field was odd.`,
+      `Entered the round with ${score} point(s).`,
+    ];
+  }
+
+  const w = byId.get(pr.whiteId!);
+  const b = byId.get(pr.blackId!);
+  if (!w || !b) return [];
+  const wScore = scoreBeforeRound(t, w.id, roundNo);
+  const bScore = scoreBeforeRound(t, b.id, roundNo);
+  const wHist = colorHistoryBeforeRound(t, w.id, roundNo);
+  const bHist = colorHistoryBeforeRound(t, b.id, roundNo);
+  const summarize = (h: Color[]) => (h.length ? `${h.filter((c) => c === 'w').length}W-${h.filter((c) => c === 'b').length}B` : 'none yet');
+  const priorRound = priorMeetingRound(t, w.id, b.id, roundNo);
+
+  return [
+    wScore === bScore
+      ? `Both entered Round ${roundNo} with ${wScore} point(s) — paired within the same score group.`
+      : `${w.name} entered with ${wScore} point(s), ${b.name} with ${bScore} — different score groups, so one of them floated to complete an odd bracket.`,
+    `Color history before this round — ${w.name}: ${summarize(wHist)}. ${b.name}: ${summarize(bHist)}.`,
+    priorRound ? `Rematch — they also played in Round ${priorRound}.` : 'First meeting between these two players.',
+  ];
+}
+
 /**
  * Records a half-point bye request for `playerId` in a future round — e.g. a player who played
  * round 1 now knows they'll be away for round 3. Only affects rounds not yet paired; requesting a

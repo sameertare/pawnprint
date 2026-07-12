@@ -1,8 +1,8 @@
 import './style.css';
 import {
-  addExtraGameForBye, cancelByeRequest, commitRound, createTournament, isNwchessRoster,
-  nextRoundNumber, pairNextRound, parseRoster, recommendedRounds, requestByeForRound, setResult,
-  standings, swapByeWithPlayer, swapColors, swapPlayersAcrossBoards,
+  addExtraGameForBye, cancelByeRequest, commitRound, createTournament, explainPairing,
+  isNwchessRoster, nextRoundNumber, pairNextRound, parseRoster, recommendedRounds,
+  requestByeForRound, setResult, standings, swapByeWithPlayer, swapColors, swapPlayersAcrossBoards,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
 import { registerServiceWorker } from './pwa';
@@ -23,6 +23,8 @@ function save() { if (ev) localStorage.setItem(STORE_KEY, JSON.stringify(ev)); }
 
 /** Which bye row (if any) currently has its "add extra game" form open — transient UI state, not saved. */
 let addingExtraFor: { round: number; byeId: number } | null = null;
+/** Which board's pairing explanation (if any) is currently expanded — transient UI state, not saved. */
+let explainingFor: { round: number; board: number } | null = null;
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -124,7 +126,10 @@ const SAMPLES: Record<string, { text: string; tname: string }> = {
 };
 
 function applyFormatHint() {
-  $('#format-hint').textContent = FORMAT_HINT[currentFormat()] ?? '';
+  // Plain list is self-explanatory from the textarea's own label — only spell out the hint for
+  // the two formats that actually need explaining (a labeled table vs. an NWChess CSV export).
+  const fmt = currentFormat();
+  $('#format-hint').textContent = fmt === 'plain' ? '' : (FORMAT_HINT[fmt] ?? '');
 }
 
 $('#sample-roster').addEventListener('click', () => {
@@ -438,6 +443,13 @@ function renderRounds(t: Tournament) {
       ]);
       const rows = round.pairings
         .map((pr) => {
+          const isExplaining = explainingFor?.round === round.number && explainingFor?.board === pr.board;
+          const explainBtn = `<button class="btn-icon explain-btn" data-round="${round.number}" data-board="${pr.board}" title="Why this pairing?">ⓘ</button>`;
+          const explainRow = isExplaining
+            ? `<tr class="explain-row"><td></td><td colspan="3"><ul class="pattern-list">${explainPairing(t, round.number, pr.board)
+                .map((line) => `<li>${esc(line)}</li>`)
+                .join('')}</ul></td></tr>`
+            : '';
           if (pr.byeId != null) {
             const pts = pr.byePoints ?? 1;
             const label = pts === 0.5 ? 'REQUESTED BYE (+½)' : 'BYE (+1)';
@@ -453,7 +465,7 @@ function renderRounds(t: Tournament) {
                 </div>
               </td></tr>`;
             }
-            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td class="mid">${label}</td></tr>`;
+            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td class="mid">${label} ${explainBtn}</td></tr>${explainRow}`;
           }
           const sel = (val: string, cur: GameResult) => `<option value="${val}"${cur === val ? ' selected' : ''}>`;
           return `<tr>
@@ -467,8 +479,9 @@ function renderRounds(t: Tournament) {
                 ${sel('1/2-1/2', pr.result)}Draw (½-½)</option>
                 ${sel('0-1', pr.result)}Black wins (0-1)</option>
               </select>
+              ${explainBtn}
             </td>
-          </tr>`;
+          </tr>${explainRow}`;
         })
         .join('');
 
@@ -622,6 +635,16 @@ function renderRounds(t: Tournament) {
       if (!ok) { alert('Could not swap those players — they may already be on the same board, or one of their boards may already have a result entered.'); return; }
       save();
       renderAll();
+    });
+  });
+
+  el.querySelectorAll<HTMLButtonElement>('.explain-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      const round = parseInt(b.dataset.round!, 10);
+      const board = parseInt(b.dataset.board!, 10);
+      explainingFor = explainingFor?.round === round && explainingFor?.board === board ? null : { round, board };
+      const t2 = cur();
+      if (t2) renderRounds(t2);
     });
   });
 }
