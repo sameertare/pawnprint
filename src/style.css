@@ -162,6 +162,7 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .bye-player-list { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
 .bye-player-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
 .pattern-list .cancel-bye-btn { margin-left: 4px; }
+.swap-players-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; font-size: 0.9rem; }
 
 .rec-card {
   border-left: 4px solid var(--blue);

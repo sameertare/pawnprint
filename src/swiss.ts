@@ -2,7 +2,7 @@ import './style.css';
 import {
   addExtraGameForBye, cancelByeRequest, commitRound, createTournament, isNwchessRoster,
   nextRoundNumber, pairNextRound, parseRoster, recommendedRounds, requestByeForRound, setResult,
-  standings, swapByeWithPlayer, swapColors,
+  standings, swapByeWithPlayer, swapColors, swapPlayersAcrossBoards,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
 import { registerServiceWorker } from './pwa';
@@ -424,13 +424,17 @@ function renderRounds(t: Tournament) {
     .map((round) => {
       const isLatestRound = round.number === t.rounds.length;
       // Players currently in an unplayed real game this round — the only valid swap-with-a-bye
-      // candidates, since swapping after a result is entered would require un-scoring it.
-      const swapCandidates = isLatestRound
-        ? round.pairings.filter((p) => p.byeId == null && p.result == null)
-            .flatMap((p) => [p.whiteId!, p.blackId!])
-            .map((id) => t.players.find((pl) => pl.id === id)!)
-            .filter(Boolean)
-        : [];
+      // candidates, since swapping after a result is entered would require un-scoring it. Also
+      // doubles as the candidate list for swapping two players across boards, below.
+      const unplayedPairings = isLatestRound ? round.pairings.filter((p) => p.byeId == null && p.result == null) : [];
+      const swapCandidates = unplayedPairings
+        .flatMap((p) => [p.whiteId!, p.blackId!])
+        .map((id) => t.players.find((pl) => pl.id === id)!)
+        .filter(Boolean);
+      const swapBoardOptions = unplayedPairings.flatMap((p) => [
+        { id: p.whiteId!, label: `Bd ${p.board} · White: ${t.players.find((pl) => pl.id === p.whiteId)?.name ?? '—'}` },
+        { id: p.blackId!, label: `Bd ${p.board} · Black: ${t.players.find((pl) => pl.id === p.blackId)?.name ?? '—'}` },
+      ]);
       const rows = round.pairings
         .map((pr) => {
           if (pr.byeId != null) {
@@ -480,10 +484,24 @@ function renderRounds(t: Tournament) {
           </tr>`;
         })
         .join('');
+      const swapBoardsControl = isLatestRound && swapBoardOptions.length >= 2
+        ? `<div class="swap-players-row">
+            <span class="hint">Swap two players between boards:</span>
+            <select class="swap-board-select" data-slot="a">
+              ${swapBoardOptions.map((o) => `<option value="${o.id}">${esc(o.label)}</option>`).join('')}
+            </select>
+            <span>⇄</span>
+            <select class="swap-board-select" data-slot="b">
+              ${swapBoardOptions.map((o, i) => `<option value="${o.id}"${i === 1 ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
+            </select>
+            <button class="btn btn-ghost btn-sm swap-players-btn" data-round="${round.number}">Swap</button>
+          </div>`
+        : '';
       return `<div class="round-block">
         <h3>Round ${round.number} ${round.complete ? '<span class="pos">✓ complete</span>' : '<span class="hint">in progress</span>'}</h3>
         <table><thead><tr><th class="num">Bd</th><th>White</th><th>Black</th><th>Result</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table>
+        ${swapBoardsControl}
       </div>`;
     })
     .reverse()
@@ -565,6 +583,24 @@ function renderRounds(t: Tournament) {
       const byeId = parseInt(b.dataset.bye!, 10);
       const ok = swapByeWithPlayer(t2, roundNo, byeId, otherId);
       if (!ok) { alert('Could not swap the bye — that player may already have a result entered.'); return; }
+      save();
+      renderAll();
+    });
+  });
+
+  el.querySelectorAll<HTMLButtonElement>('.swap-players-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      const t2 = cur();
+      if (!t2) return;
+      const wrap = b.closest('.swap-players-row')!;
+      const selA = wrap.querySelector('.swap-board-select[data-slot="a"]') as HTMLSelectElement;
+      const selB = wrap.querySelector('.swap-board-select[data-slot="b"]') as HTMLSelectElement;
+      const aId = parseInt(selA.value, 10);
+      const bId = parseInt(selB.value, 10);
+      if (aId === bId) { alert('Pick two different players.'); return; }
+      const roundNo = parseInt(b.dataset.round!, 10);
+      const ok = swapPlayersAcrossBoards(t2, roundNo, aId, bId);
+      if (!ok) { alert('Could not swap those players — they may already be on the same board, or one of their boards may already have a result entered.'); return; }
       save();
       renderAll();
     });

@@ -649,6 +649,51 @@ export function swapByeWithPlayer(t: Tournament, roundNo: number, byeId: number,
   return true;
 }
 
+/**
+ * Swaps two players who are on different boards in the latest round — e.g. board 2 and board 3
+ * should have been paired against each other instead of who they actually got. Each player takes
+ * over the other's board and color slot (against the other's original opponent); who's White vs
+ * Black on each board is unaffected by the swap itself. Only the latest round, and only when
+ * neither board has a result entered yet. Returns false if any precondition isn't met (including
+ * both players already being on the same board — nothing to swap).
+ */
+export function swapPlayersAcrossBoards(t: Tournament, roundNo: number, playerAId: number, playerBId: number): boolean {
+  if (roundNo !== t.rounds.length || playerAId === playerBId) return false;
+  const round = t.rounds[roundNo - 1];
+  if (!round) return false;
+  const prA = round.pairings.find((p) => p.byeId == null && (p.whiteId === playerAId || p.blackId === playerAId));
+  const prB = round.pairings.find((p) => p.byeId == null && (p.whiteId === playerBId || p.blackId === playerBId));
+  if (!prA || !prB || prA === prB) return false;
+  if (prA.result != null || prB.result != null) return false;
+
+  const byId = new Map(t.players.map((p) => [p.id, p]));
+  const playerA = byId.get(playerAId);
+  const playerB = byId.get(playerBId);
+  if (!playerA || !playerB || playerA.withdrawn || playerB.withdrawn) return false;
+
+  const aWasWhite = prA.whiteId === playerAId;
+  const bWasWhite = prB.whiteId === playerBId;
+  const aOpponentId = aWasWhite ? prA.blackId! : prA.whiteId!;
+  const bOpponentId = bWasWhite ? prB.blackId! : prB.whiteId!;
+  const aOpponent = byId.get(aOpponentId);
+  const bOpponent = byId.get(bOpponentId);
+  if (!aOpponent || !bOpponent) return false;
+
+  // Give each player the other's board/color slot/opponent.
+  playerA.opponents.pop(); playerA.colors.pop();
+  playerB.opponents.pop(); playerB.colors.pop();
+  playerA.opponents.push(bOpponentId); playerA.colors.push(bWasWhite ? 'w' : 'b');
+  playerB.opponents.push(aOpponentId); playerB.colors.push(aWasWhite ? 'w' : 'b');
+
+  // Their former opponents now face the new arrival instead.
+  aOpponent.opponents[aOpponent.opponents.length - 1] = playerBId;
+  bOpponent.opponents[bOpponent.opponents.length - 1] = playerAId;
+
+  if (aWasWhite) prA.whiteId = playerBId; else prA.blackId = playerBId;
+  if (bWasWhite) prB.whiteId = playerAId; else prB.blackId = playerAId;
+  return true;
+}
+
 /** Enter/replace a game result and keep scores consistent. */
 export function setResult(t: Tournament, roundNo: number, board: number, result: GameResult) {
   const round = t.rounds.find((r) => r.number === roundNo);
