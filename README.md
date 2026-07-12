@@ -103,7 +103,7 @@ Prefer the backend features (server report storage) live too? Deploy the whole t
 ## Project layout
 
 ```
-index.html / analyze.html / live.html / swiss.html / opening-explorer.html / compare-reports.html / rating.html / fide-rating.html   the seven pages (Vite multi-page build)
+index.html / analyze.html / live.html / swiss.html / opening-explorer.html / compare-reports.html / rating.html / fide-rating.html / about.html   the seven tool pages + About (Vite multi-page build)
 src/
   types.ts          shared data model (also the shape persisted in the .md)
   pgn.ts            multi-game PGN splitting & parsing, eval/clock tag extraction
@@ -129,6 +129,7 @@ src/
   rating.ts         USCF Rating Estimator UI
   fideRatingEngine.ts pure FIDE rating-estimate logic
   fideRating.ts     FIDE Rating Estimator UI
+  about.ts          About page (static content, no logic of its own)
 server/
   server.mjs      Express: static hosting, /api/reports save/load, /api/live/:id SSE relay
 public/engine/    Stockfish 18 (lite) worker + wasm

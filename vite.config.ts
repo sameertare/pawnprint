@@ -23,6 +23,7 @@ export default defineConfig({
         compareReports: page('./compare-reports.html'),
         rating: page('./rating.html'),
         fideRating: page('./fide-rating.html'),
+        about: page('./about.html'),
       },
     },
   },

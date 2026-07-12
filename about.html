@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About — OpenFile</title>
+    <link rel="icon" href="/logo-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#14181f" />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html"><img src="/logo-icon.png" alt="" class="brand-logo" width="24" height="24">OpenFile</a>
+      <div class="navlinks">
+        <a href="index.html">🏠 Home</a>
+        <a href="analyze.html">Performance Analysis</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+        <a href="opening-explorer.html">Opening Explorer</a>
+        <a href="compare-reports.html">Compare Reports</a>
+        <a href="rating.html">USCF Rating</a>
+        <a href="fide-rating.html">FIDE Rating</a>
+        <a href="about.html" class="active">About</a>
+      </div>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>ℹ About OpenFile</h1>
+        <p class="tagline">A local-first chess toolkit for players, parents, and tournament organizers.</p>
+      </header>
+
+      <section class="card">
+        <h2>What this is</h2>
+        <p>OpenFile is a set of seven small, focused chess tools — deep game analysis, a live engine board, Swiss tournament pairings, an opening tree, a report comparer, and rating estimators — each its own page, reachable from the <a href="index.html">home hub</a>. There's no single sprawling app to learn; open the tool you need for the task in front of you.</p>
+      </section>
+
+      <section class="card">
+        <h2>Runs entirely in your browser</h2>
+        <p>Every tool runs client-side. Game analysis uses <strong>Stockfish 18 (lite)</strong> compiled to WebAssembly and executed on your own machine — your PGNs and reports are never uploaded anywhere. Live games are streamed directly from the public lichess API straight to your browser; there's no OpenFile server in that path. Swiss tournaments persist to your browser's local storage. The only feature that touches a backend at all is the optional server-side report save/load, and even that's off by default on the static-hosted version of the site.</p>
+      </section>
+
+      <section class="card">
+        <h2>The seven tools</h2>
+        <table>
+          <thead><tr><th>Tool</th><th>What it's for</th></tr></thead>
+          <tbody>
+            <tr><td><a href="analyze.html">Performance Analysis</a></td><td>Deep report from chess.com / lichess PGNs — openings, phases, tactics, patterns, training plan</td></tr>
+            <tr><td><a href="live.html">Live &amp; Engine</a></td><td>Watch a live lichess game with move feedback, or get Stockfish's best move from any position</td></tr>
+            <tr><td><a href="swiss.html">Swiss Pairings</a></td><td>Run a full Swiss tournament from a roster — pairings, results, standings, tiebreaks</td></tr>
+            <tr><td><a href="opening-explorer.html">Opening Explorer</a></td><td>Branching opening tree built from your own games or an opponent's public account</td></tr>
+            <tr><td><a href="compare-reports.html">Compare Reports</a></td><td>Side-by-side metric delta between two saved reports — progress over time, or head-to-head</td></tr>
+            <tr><td><a href="rating.html">USCF Rating Estimator</a></td><td>Estimate a new US Chess rating after an event</td></tr>
+            <tr><td><a href="fide-rating.html">FIDE Rating Estimator</a></td><td>Estimate a new FIDE Standard rating after an event</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Install &amp; use offline</h2>
+        <p>OpenFile is an installable PWA. Most browsers offer an install prompt (address-bar icon, or browser menu → "Install OpenFile"); installed, it opens in its own window with no browser chrome. A service worker caches the app shell and the Stockfish engine files after your first visit, so position analysis and PGN review keep working with no connection at all once the engine has loaded — handy in a tournament hall with bad wifi. Live game streaming and account lookups still need a connection, since those come from lichess's/chess.com's public APIs.</p>
+      </section>
+
+      <section class="card">
+        <h2>Source</h2>
+        <p>OpenFile is open source. <a href="https://github.com/sameertare/openfile" target="_blank" rel="noopener">View the code on GitHub</a>.</p>
+      </section>
+
+      <footer class="app-footer">
+        OpenFile · runs entirely in your browser · Stockfish 18 (lite) · your games never leave your machine
+      </footer>
+    </div>
+    <script type="module" src="/src/about.ts"></script>
+  </body>
+</html>
