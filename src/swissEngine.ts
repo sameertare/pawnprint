@@ -559,6 +559,96 @@ export function addExtraGameForBye(
   return true;
 }
 
+/**
+ * Swaps which of the two paired players is White vs Black on a board — e.g. the TD notices
+ * colors were assigned backwards. Whoever actually won stays the winner: if a result was already
+ * entered, it's flipped (1-0 ↔ 0-1) along with the colors so the recorded outcome still points at
+ * the same player, not the same color. Only the latest round can be edited this way, matching
+ * addExtraGameForBye's restriction — editing a past round's colors would leave later rounds'
+ * pairings out of sync with the color-balance history they were built from.
+ */
+export function swapColors(t: Tournament, roundNo: number, board: number): boolean {
+  if (roundNo !== t.rounds.length) return false;
+  const round = t.rounds[roundNo - 1];
+  if (!round) return false;
+  const pr = round.pairings.find((p) => p.board === board);
+  if (!pr || pr.byeId != null || pr.whiteId == null || pr.blackId == null) return false;
+
+  const byId = new Map(t.players.map((p) => [p.id, p]));
+  const w = byId.get(pr.whiteId);
+  const b = byId.get(pr.blackId);
+  if (!w || !b) return false;
+
+  [pr.whiteId, pr.blackId] = [pr.blackId, pr.whiteId];
+  if (pr.result === '1-0') pr.result = '0-1';
+  else if (pr.result === '0-1') pr.result = '1-0';
+
+  // Flip the most recent (this round's) color entry for each player — using the *last* array
+  // index rather than roundNo-1 keeps this correct even if a player's colors/opponents history
+  // has ever gone out of round-index alignment (e.g. from a bye elsewhere).
+  if (w.colors.length) w.colors[w.colors.length - 1] = w.colors[w.colors.length - 1] === 'w' ? 'b' : 'w';
+  if (b.colors.length) b.colors[b.colors.length - 1] = b.colors[b.colors.length - 1] === 'w' ? 'b' : 'w';
+  return true;
+}
+
+/**
+ * Reassigns a bye from one player to another player currently paired in the same round — e.g.
+ * the wrong player was given the bye and someone else should have sat out instead. The original
+ * bye recipient takes over the other player's board (same color, same opponent); the other
+ * player gets the bye instead. Only the latest round, and only when that board hasn't had a
+ * result entered yet (swapping after a game's been played would require un-scoring it, which
+ * isn't supported here). Returns false if any precondition isn't met.
+ */
+export function swapByeWithPlayer(t: Tournament, roundNo: number, byeId: number, otherPlayerId: number): boolean {
+  if (roundNo !== t.rounds.length || byeId === otherPlayerId) return false;
+  const round = t.rounds[roundNo - 1];
+  if (!round) return false;
+  const byePr = round.pairings.find((p) => p.byeId === byeId);
+  if (!byePr) return false;
+  const otherPr = round.pairings.find(
+    (p) => p.byeId == null && (p.whiteId === otherPlayerId || p.blackId === otherPlayerId)
+  );
+  if (!otherPr || otherPr.result != null) return false;
+
+  const byId = new Map(t.players.map((p) => [p.id, p]));
+  const byePlayer = byId.get(byeId);
+  const otherPlayer = byId.get(otherPlayerId);
+  if (!byePlayer || !otherPlayer || byePlayer.withdrawn || otherPlayer.withdrawn) return false;
+
+  const otherWasWhite = otherPr.whiteId === otherPlayerId;
+  const thirdId = otherWasWhite ? otherPr.blackId! : otherPr.whiteId!;
+  const thirdPlayer = byId.get(thirdId);
+  if (!thirdPlayer) return false;
+
+  // Undo the bye.
+  const points = byePr.byePoints ?? 1;
+  byePlayer.score -= points;
+  byePlayer.opponents.pop();
+  if (points === 0.5) byePlayer.requestedByes = Math.max(0, (byePlayer.requestedByes ?? 0) - 1);
+  else byePlayer.byes = Math.max(0, (byePlayer.byes ?? 0) - 1);
+
+  // Undo the other player's real-game commit and give them the bye instead.
+  otherPlayer.opponents.pop();
+  otherPlayer.colors.pop();
+  otherPlayer.opponents.push(-1);
+  if (points === 0.5) otherPlayer.requestedByes = (otherPlayer.requestedByes ?? 0) + 1;
+  else otherPlayer.byes = (otherPlayer.byes ?? 0) + 1;
+  otherPlayer.score += points;
+
+  // Give the original bye recipient the vacated board — same color slot, same opponent.
+  const slotColor: Color = otherWasWhite ? 'w' : 'b';
+  byePlayer.opponents.push(thirdId);
+  byePlayer.colors.push(slotColor);
+  thirdPlayer.opponents[thirdPlayer.opponents.length - 1] = byeId;
+
+  byePr.byeId = otherPlayerId;
+  if (otherWasWhite) otherPr.whiteId = byeId;
+  else otherPr.blackId = byeId;
+
+  round.complete = round.pairings.every((p) => p.byeId != null || p.result != null);
+  return true;
+}
+
 /** Enter/replace a game result and keep scores consistent. */
 export function setResult(t: Tournament, roundNo: number, board: number, result: GameResult) {
   const round = t.rounds.find((r) => r.number === roundNo);

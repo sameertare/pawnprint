@@ -2,7 +2,7 @@ import './style.css';
 import {
   addExtraGameForBye, cancelByeRequest, commitRound, createTournament, isNwchessRoster,
   nextRoundNumber, pairNextRound, parseRoster, recommendedRounds, requestByeForRound, setResult,
-  standings,
+  standings, swapByeWithPlayer, swapColors,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
 import { registerServiceWorker } from './pwa';
@@ -423,6 +423,14 @@ function renderRounds(t: Tournament) {
   el.innerHTML = t.rounds
     .map((round) => {
       const isLatestRound = round.number === t.rounds.length;
+      // Players currently in an unplayed real game this round — the only valid swap-with-a-bye
+      // candidates, since swapping after a result is entered would require un-scoring it.
+      const swapCandidates = isLatestRound
+        ? round.pairings.filter((p) => p.byeId == null && p.result == null)
+            .flatMap((p) => [p.whiteId!, p.blackId!])
+            .map((id) => t.players.find((pl) => pl.id === id)!)
+            .filter(Boolean)
+        : [];
       const rows = round.pairings
         .map((pr) => {
           if (pr.byeId != null) {
@@ -443,14 +451,24 @@ function renderRounds(t: Tournament) {
             const addBtn = isLatestRound
               ? ` <button class="btn btn-ghost btn-sm add-extra-btn" data-round="${round.number}" data-bye="${pr.byeId}">+ Add extra game</button>`
               : '';
-            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td colspan="2" class="mid">${label}${addBtn}</td></tr>`;
+            const swapControl = isLatestRound && swapCandidates.length
+              ? ` <select class="swap-bye-select" data-round="${round.number}" data-bye="${pr.byeId}">
+                    <option value="">Swap bye with…</option>
+                    ${swapCandidates.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+                  </select>
+                  <button class="btn btn-ghost btn-sm swap-bye-btn" data-round="${round.number}" data-bye="${pr.byeId}">Swap</button>`
+              : '';
+            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td colspan="2" class="mid">${label}${addBtn}${swapControl}</td></tr>`;
           }
           const sel = (val: string, cur: GameResult) => `<option value="${val}"${cur === val ? ' selected' : ''}>`;
+          const swapColorsBtn = isLatestRound
+            ? `<button class="btn-icon swap-colors-btn" data-round="${round.number}" data-board="${pr.board}" title="Swap White/Black on this board">⇅</button>`
+            : '';
           return `<tr>
             <td class="num">${pr.board}</td>
             <td>♔ ${esc(nameWithRatingOf(t, pr.whiteId))}</td>
             <td>♚ ${esc(nameWithRatingOf(t, pr.blackId))}</td>
-            <td colspan="2">
+            <td>
               <select class="result-sel" data-round="${round.number}" data-board="${pr.board}">
                 <option value=""${pr.result == null ? ' selected' : ''}>— result —</option>
                 ${sel('1-0', pr.result)}White wins (1-0)</option>
@@ -458,12 +476,13 @@ function renderRounds(t: Tournament) {
                 ${sel('0-1', pr.result)}Black wins (0-1)</option>
               </select>
             </td>
+            <td class="num">${swapColorsBtn}</td>
           </tr>`;
         })
         .join('');
       return `<div class="round-block">
         <h3>Round ${round.number} ${round.complete ? '<span class="pos">✓ complete</span>' : '<span class="hint">in progress</span>'}</h3>
-        <table><thead><tr><th class="num">Bd</th><th>White</th><th>Black</th><th colspan="2">Result</th></tr></thead>
+        <table><thead><tr><th class="num">Bd</th><th>White</th><th>Black</th><th>Result</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table>
       </div>`;
     })
@@ -519,6 +538,33 @@ function renderRounds(t: Tournament) {
       const ok = addExtraGameForBye(t2, roundNo, byeId, name, rating);
       if (!ok) { alert('Could not add this game — the bye may no longer be available.'); return; }
       addingExtraFor = null;
+      save();
+      renderAll();
+    });
+  });
+
+  el.querySelectorAll<HTMLButtonElement>('.swap-colors-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      const t2 = cur();
+      if (!t2) return;
+      const ok = swapColors(t2, parseInt(b.dataset.round!, 10), parseInt(b.dataset.board!, 10));
+      if (!ok) { alert('Could not swap colors on this board.'); return; }
+      save();
+      renderAll();
+    });
+  });
+  el.querySelectorAll<HTMLButtonElement>('.swap-bye-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      const t2 = cur();
+      if (!t2) return;
+      const row = b.closest('tr')!;
+      const select = row.querySelector('.swap-bye-select') as HTMLSelectElement;
+      const otherId = parseInt(select.value, 10);
+      if (!select.value || !Number.isFinite(otherId)) { alert('Pick a player to swap the bye with.'); return; }
+      const roundNo = parseInt(b.dataset.round!, 10);
+      const byeId = parseInt(b.dataset.bye!, 10);
+      const ok = swapByeWithPlayer(t2, roundNo, byeId, otherId);
+      if (!ok) { alert('Could not swap the bye — that player may already have a result entered.'); return; }
       save();
       renderAll();
     });
