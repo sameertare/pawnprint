@@ -168,6 +168,7 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
   let reachedEndgame = false;
   let endgameType: string | null = null;
   let userMoveCount = 0;
+  const clockSeries: { moveNo: number; sec: number }[] = [];
 
   for (let i = 0; i < game.moves.length; i++) {
     const mv = game.moves[i];
@@ -178,7 +179,10 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
     }
     if (mv.color !== userColor) continue;
     userMoveCount++;
-    if (mv.clockSec !== null) clockDataAvailable = true;
+    if (mv.clockSec !== null) {
+      clockDataAvailable = true;
+      clockSeries.push({ moveNo: mv.moveNo, sec: mv.clockSec });
+    }
     if (!analyzed) continue;
 
     const wBefore = winPct(evals[i]!);
@@ -318,6 +322,7 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
     endgameType,
     clockDataAvailable,
     timePressureBlunders,
+    clockSeries,
     worstMoves: worstMoves.slice(0, 3),
     evalGraph: analyzed ? evals.map((v) => Math.max(-1000, Math.min(1000, v ?? 0))) : null,
     sans,

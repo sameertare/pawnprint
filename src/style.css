@@ -342,6 +342,15 @@ a { color: var(--blue); }
 .spark-cell svg { width: 140px; height: 28px; }
 .games-table-wrap a { text-decoration: none; font-size: 1.1rem; }
 
+/* ---------- line charts (trend chart, time-usage chart) ---------- */
+.chart-wrap { margin-top: 8px; }
+.linechart { display: block; width: 100%; height: auto; }
+.chart-grid { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-axis-label { font-size: 9px; fill: var(--text-dim); }
+.chart-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; font-size: 0.82rem; color: var(--text-dim); }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+
 .breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 10px 0 4px; }
 .crumb {
   background: transparent; border: none; color: var(--text-dim); font-size: 0.88rem;

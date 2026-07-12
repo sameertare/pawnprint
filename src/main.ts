@@ -3,11 +3,12 @@ import type { ParsedGame, ParseFailure } from './pgn';
 import { gameId, splitPgn, tryParseGame } from './pgn';
 import { Engine } from './engine';
 import { analyzeGame, positionsNeeded } from './analyze';
-import { aggregate, scorePct, themeUrl } from './aggregate';
-import type { Aggregates, OpeningRow, WDL } from './aggregate';
+import { aggregate, scorePct, themeUrl, opponentList, headToHeadWithOpponent } from './aggregate';
+import type { Aggregates, OpeningRow, WDL, HeadToHeadOpponent } from './aggregate';
 import { mergeGames, parseMarkdownReport, renderMarkdown } from './markdown';
 import type { GameRecord, ReportData, ReportMeta } from './types';
 import { renderSparklineSvg } from './sparkline';
+import { renderLineChartSvg } from './linechart';
 import { registerServiceWorker } from './pwa';
 import { groupPlayerNames, nameKey } from './playerMatch';
 import { buildAnnotatedPgn, downloadPgn } from './pgnExport';
@@ -294,8 +295,23 @@ function openingTableHtml(rows: OpeningRow[], emptyMsg: string): string {
     .join('')}</tbody></table>`;
 }
 
-function renderGamesSection(games: GameRecord[]): string {
-  if (!games.length) return '';
+function h2hBodyHtml(h2h: HeadToHeadOpponent): string {
+  if (!h2h.games.length) return '<p class="section-note">No games found against this opponent.</p>';
+  return `
+    <div class="summary-cards">
+      <div class="stat-card"><span class="big">${h2h.wdl.games}</span><span class="label">Games</span></div>
+      <div class="stat-card"><span class="big">${h2h.wdl.wins}-${h2h.wdl.draws}-${h2h.wdl.losses}</span><span class="label">W-D-L</span></div>
+      <div class="stat-card"><span class="big">${pct(scorePct(h2h.wdl))}</span><span class="label">Score</span></div>
+    </div>
+    <h3>Openings vs ${esc(h2h.opponent)}</h3>
+    ${openingTableHtml(h2h.openings, 'No repeated openings against this opponent yet.')}
+    <h3>Games</h3>
+    ${gamesTableHtml(h2h.games)}
+  `;
+}
+
+function gamesTableHtml(games: GameRecord[]): string {
+  if (!games.length) return '<p class="section-note">No games.</p>';
   const rows = [...games]
     .sort((x, y) => y.date.localeCompare(x.date))
     .map((g) => {
@@ -326,10 +342,15 @@ function renderGamesSection(games: GameRecord[]): string {
       </tr>`;
     })
     .join('');
-  return `<div class="card"><h2>📈 Games</h2>
-    <div class="games-table-wrap"><table><thead><tr>
+  return `<div class="games-table-wrap"><table><thead><tr>
       <th>Date</th><th>Opponent</th><th>Result</th><th>Opening</th><th class="num">Accuracy</th><th>Eval graph</th><th></th>
-    </tr></thead><tbody>${rows}</tbody></table></div>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderGamesSection(games: GameRecord[]): string {
+  if (!games.length) return '';
+  return `<div class="card"><h2>📈 Games</h2>
+    ${gamesTableHtml(games)}
     <p class="hint">The eval graph tracks the position's evaluation (white's perspective) across the whole game. Click ▶ to open a game in Live &amp; Engine and step through it move by move. Click ⬇ to download that game as a standard PGN with engine evals and flagged-move notes baked in as comments.</p>
   </div>`;
 }
@@ -356,6 +377,19 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
   </div>`);
 
   html.push(renderGamesSection(records));
+
+  const opponents = opponentList(records);
+  if (opponents.length > 0) {
+    const topOpponent = opponents[0].opponent;
+    html.push(`<div class="card"><h2>🤝 Head-to-head</h2>
+      <label class="stack">Opponent
+        <select id="opponent-select">
+          ${opponents.map((o) => `<option value="${esc(o.opponent)}">${esc(o.opponent)} (${o.games} game${o.games === 1 ? '' : 's'})</option>`).join('')}
+        </select>
+      </label>
+      <div id="h2h-body">${h2hBodyHtml(headToHeadWithOpponent(records, topOpponent))}</div>
+    </div>`);
+  }
 
   html.push(`<div class="card"><h2>♟ Opening performance</h2>
     <h3>Strongest openings</h3>${openingTableHtml(a.strongest, 'Need at least 2 games in an opening (with ≥50% score) to rank it.')}
@@ -434,6 +468,16 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
     <p class="section-note">${p.timePressureBlunders} blunder(s)/mistake(s) were played with under 30 seconds on the clock, across ${p.clockGames} game(s) with clock data${timePct !== null ? ` — ${timePct}% of all your inaccuracy-or-worse moves happened in time trouble` : ''}. ${p.timePressureBlunders >= 2 ? 'Worth training: banking more time earlier in the game, or practicing at a longer time control.' : 'Not a major factor yet in this sample.'}</p>`
         : `<p class="section-note">No clock data found in these games — they don't include <code>[%clk]</code> tags (common for correspondence/daily games or manually-typed PGNs).</p>`
     }
+    ${
+      a.timeUsage.length > 1
+        ? `<h3>Time usage by move number</h3>
+    <p class="section-note">Average seconds left on the clock after each move, across every game with clock data — shows whether time trouble tends to build up at a particular stage rather than being spread evenly.</p>
+    ${renderLineChartSvg(
+      [{ label: 'Avg. seconds remaining', values: a.timeUsage.map((t) => t.avgSec), color: 'var(--accent)' }],
+      { xLabels: a.timeUsage.map((t) => String(t.moveNo)), ySuffix: 's' }
+    )}`
+        : ''
+    }
   </div>`);
 
   html.push(`<div class="card"><h2>🔍 Patterns detected</h2>
@@ -490,6 +534,14 @@ resultsEl.addEventListener('click', (e) => {
   if (!rec) return;
   const safeName = `${rec.white}_vs_${rec.black}`.replace(/[^\w.-]/g, '_').slice(0, 60);
   downloadPgn(`${rec.date}_${safeName}.pgn`, buildAnnotatedPgn(rec));
+});
+
+resultsEl.addEventListener('change', (e) => {
+  const select = e.target as HTMLElement;
+  if (select.id !== 'opponent-select') return;
+  const opponent = (select as HTMLSelectElement).value;
+  const body = $('#h2h-body');
+  if (body) body.innerHTML = h2hBodyHtml(headToHeadWithOpponent(records, opponent));
 });
 
 // ---------- export / persistence ----------

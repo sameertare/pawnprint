@@ -5,6 +5,7 @@ import type { Aggregates } from './aggregate';
 import type { ReportData } from './types';
 import { compareReports, betterSide, headToHead } from './reportCompare';
 import type { DeltaRow, OpeningDelta } from './reportCompare';
+import { renderLineChartSvg } from './linechart';
 import { registerServiceWorker } from './pwa';
 
 registerServiceWorker();
@@ -167,4 +168,102 @@ function tryRender() {
 
   resultsEl.hidden = false;
   resultsEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ---------- trend across 3+ reports ----------
+interface TrendEntry {
+  report: ReportData;
+  agg: Aggregates;
+  date: string; // updatedAt (fallback createdAt), used to sort chronologically
+}
+let trendEntries: TrendEntry[] = [];
+
+const trendDropzone = $('#trend-dropzone');
+const trendFileInput = $('#trend-file') as HTMLInputElement;
+const trendSummaryEl = $('#trend-summary');
+const trendErrorEl = $('#trend-error');
+const trendResultsEl = $('#trend-results');
+const trendClearBtn = $('#trend-clear') as HTMLButtonElement;
+
+async function loadTrendFiles(files: File[]) {
+  trendErrorEl.textContent = '';
+  const errors: string[] = [];
+  for (const file of files) {
+    const text = await file.text();
+    const data = parseMarkdownReport(text);
+    if (!data) {
+      errors.push(`"${file.name}" doesn't look like a report.md (no embedded data block found).`);
+      continue;
+    }
+    trendEntries.push({
+      report: data,
+      agg: aggregate(data.games),
+      date: data.meta.updatedAt || data.meta.createdAt,
+    });
+  }
+  if (errors.length) trendErrorEl.textContent = errors.join(' ');
+  renderTrend();
+}
+
+trendFileInput.addEventListener('change', () => {
+  if (trendFileInput.files?.length) void loadTrendFiles([...trendFileInput.files]);
+  trendFileInput.value = '';
+});
+trendDropzone.addEventListener('dragover', (e) => { e.preventDefault(); trendDropzone.classList.add('dragover'); });
+trendDropzone.addEventListener('dragleave', () => trendDropzone.classList.remove('dragover'));
+trendDropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  trendDropzone.classList.remove('dragover');
+  const files = e.dataTransfer?.files;
+  if (files?.length) void loadTrendFiles([...files]);
+});
+trendClearBtn.addEventListener('click', () => {
+  trendEntries = [];
+  trendErrorEl.textContent = '';
+  renderTrend();
+});
+
+function renderTrend() {
+  trendSummaryEl.innerHTML = trendEntries
+    .map((t) => `<span class="chip">✓ <b>${esc(t.report.meta.username)}</b> — ${t.report.games.length} game(s), ${esc(t.date.slice(0, 10))}</span>`)
+    .join(' ');
+  trendClearBtn.hidden = trendEntries.length === 0;
+
+  if (trendEntries.length < 2) {
+    trendResultsEl.hidden = true;
+    return;
+  }
+
+  const sorted = [...trendEntries].sort((x, y) => x.date.localeCompare(y.date));
+  const usernames = new Set(sorted.map((t) => t.report.meta.username.trim().toLowerCase()));
+  const mismatchNote = usernames.size > 1
+    ? `<p class="hint">⚠ These reports belong to different players (${[...new Set(sorted.map((t) => t.report.meta.username))].map(esc).join(', ')}) — charting anyway, in date order, but a trend usually only makes sense for one player over time.</p>`
+    : '';
+
+  const xLabels = sorted.map((t) => t.date.slice(0, 10));
+  $('#trend-chart').innerHTML = `
+    ${mismatchNote}
+    ${renderLineChartSvg(
+      [
+        { label: 'Score %', values: sorted.map((t) => scorePct(t.agg.total)), color: 'var(--accent)' },
+        { label: 'Accuracy %', values: sorted.map((t) => t.agg.overallAccuracy), color: 'var(--gold)' },
+      ],
+      { xLabels, yMin: 0, yMax: 100, ySuffix: '%' }
+    )}
+  `;
+
+  const rows = sorted
+    .map(
+      (t) => `<tr>
+        <td>${esc(t.date.slice(0, 10))}</td>
+        <td>${esc(t.report.meta.username)}</td>
+        <td class="num">${t.report.games.length}</td>
+        <td class="num">${scorePct(t.agg.total)}%</td>
+        <td class="num">${t.agg.overallAccuracy !== null ? t.agg.overallAccuracy + '%' : '—'}</td>
+      </tr>`
+    )
+    .join('');
+  $('#trend-table').innerHTML = `<table><thead><tr><th>Date</th><th>Player</th><th class="num">Games</th><th class="num">Score</th><th class="num">Accuracy</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  trendResultsEl.hidden = false;
 }

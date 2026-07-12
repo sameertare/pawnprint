@@ -65,6 +65,7 @@ export interface Aggregates {
   weakest: OpeningRow[];
   byTimeClass: { timeClass: string; wdl: WDL; avgAccuracy: number | null }[];
   openingsByTimeClass: { timeClass: string; openings: OpeningRow[] }[];
+  timeUsage: { moveNo: number; avgSec: number; games: number }[];
   phases: PhaseStats[];
   overallAccuracy: number | null;
   tactics: {
@@ -124,6 +125,45 @@ function computeOpenings(games: GameRecord[]): OpeningRow[] {
   return [...openingMap.values()].sort((a, b) => b.games - a.games);
 }
 
+export interface OpponentSummary {
+  opponent: string; // as it appears in the games (first-seen casing)
+  games: number;
+}
+
+/** Every opponent the loaded games' main player has faced, most-played first — case-insensitive
+ *  dedupe so "bob" and "Bob" count as one opponent. Feeds the head-to-head opponent picker. */
+export function opponentList(games: GameRecord[]): OpponentSummary[] {
+  const map = new Map<string, OpponentSummary>();
+  for (const g of games) {
+    const opp = (g.userColor === 'w' ? g.black : g.white).trim();
+    if (!opp) continue;
+    const key = opp.toLowerCase();
+    const existing = map.get(key);
+    if (existing) existing.games++;
+    else map.set(key, { opponent: opp, games: 1 });
+  }
+  return [...map.values()].sort((a, b) => b.games - a.games);
+}
+
+export interface HeadToHeadOpponent {
+  opponent: string;
+  wdl: WDL;
+  openings: OpeningRow[];
+  games: GameRecord[];
+}
+
+/** All games played against one specific opponent (by name, case-insensitive) — W/D/L, an
+ *  opening breakdown for just that match-up, and the underlying game list, most recent first. */
+export function headToHeadWithOpponent(games: GameRecord[], opponent: string): HeadToHeadOpponent {
+  const key = opponent.trim().toLowerCase();
+  const matched = games
+    .filter((g) => (g.userColor === 'w' ? g.black : g.white).trim().toLowerCase() === key)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const wdl = emptyWDL();
+  for (const g of matched) addResult(wdl, g);
+  return { opponent, wdl, openings: computeOpenings(matched), games: matched };
+}
+
 export function aggregate(games: GameRecord[]): Aggregates {
   const total = emptyWDL();
   const byColor = { white: emptyWDL(), black: emptyWDL() };
@@ -153,6 +193,25 @@ export function aggregate(games: GameRecord[]): Aggregates {
   const openingsByTimeClass = [...tcMap.entries()]
     .map(([timeClass, v]) => ({ timeClass, openings: computeOpenings(v.games) }))
     .filter((t) => t.openings.length > 0);
+
+  // Average seconds left on the clock by move number, across every game with clock data —
+  // surfaces whether time trouble tends to hit at a particular stage of the game rather than
+  // being spread evenly. `?? []` guards report.md files saved before this field existed.
+  const timeUsageMap = new Map<number, { sum: number; count: number }>();
+  for (const g of games) {
+    for (const entry of g.clockSeries ?? []) {
+      let bucket = timeUsageMap.get(entry.moveNo);
+      if (!bucket) {
+        bucket = { sum: 0, count: 0 };
+        timeUsageMap.set(entry.moveNo, bucket);
+      }
+      bucket.sum += entry.sec;
+      bucket.count++;
+    }
+  }
+  const timeUsage = [...timeUsageMap.entries()]
+    .map(([moveNo, v]) => ({ moveNo, avgSec: Math.round((v.sum / v.count) * 10) / 10, games: v.count }))
+    .sort((a, b) => a.moveNo - b.moveNo);
 
   // Phase stats
   const phases: PhaseStats[] = PHASES.map((phase) => {
@@ -259,6 +318,7 @@ export function aggregate(games: GameRecord[]): Aggregates {
     openingsByTimeClass: openingsByTimeClass.sort(
       (a, b) => b.openings.reduce((s, o) => s + o.games, 0) - a.openings.reduce((s, o) => s + o.games, 0)
     ),
+    timeUsage,
     phases, overallAccuracy, tactics, patterns, recommendations,
     analyzedCount: analyzed.length,
   };

@@ -92,6 +92,23 @@
         </div>
       </section>
 
+      <section class="card" id="trend-card">
+        <h2>📈 Trend across reports</h2>
+        <p class="hint">Load three or more saved reports for the <b>same player</b> to see score and accuracy plotted over time — more signal than a single before/after snapshot. Drop them all at once or add more later.</p>
+        <div id="trend-dropzone" class="dropzone">
+          <p><strong>Drop 2+ report.md files here</strong> — or</p>
+          <label class="btn btn-primary" for="trend-file">Choose files</label>
+          <input type="file" id="trend-file" accept=".md" multiple hidden />
+        </div>
+        <div id="trend-summary" class="file-summary"></div>
+        <div id="trend-error" class="neg" style="margin-top:10px;"></div>
+        <div id="trend-results" hidden>
+          <div id="trend-chart"></div>
+          <div id="trend-table" style="margin-top:12px;"></div>
+        </div>
+        <button id="trend-clear" class="btn btn-ghost" style="margin-top:10px;" hidden>Clear trend</button>
+      </section>
+
       <footer class="app-footer">
         OpenFile · comparison runs entirely in your browser · nothing is uploaded anywhere
       </footer>
