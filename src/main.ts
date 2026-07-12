@@ -369,6 +369,15 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
     </tbody></table>
   </div>`);
 
+  if (a.openingsByTimeClass.length > 1) {
+    html.push(`<div class="card"><h2>♟⏱ Openings by time control</h2>
+      <p class="section-note">The same opening can score very differently depending on speed — a repertoire built for Rapid may fall apart in Bullet. Each table below only reflects games played at that time control.</p>
+      ${a.openingsByTimeClass
+        .map((tc) => `<h3>${esc(tc.timeClass)}</h3>${openingTableHtml(tc.openings, 'No games at this time control.')}`)
+        .join('')}
+    </div>`);
+  }
+
   const egRows = Object.entries(p.endgameTypeCounts).sort((x, y) => y[1].games - x[1].games);
   html.push(`<div class="card"><h2>📊 Game-phase breakdown</h2>
     <table><thead><tr><th>Phase</th><th class="num">Accuracy</th><th class="num">Inaccuracies</th><th class="num">Mistakes</th><th class="num">Blunders</th><th class="num">Blunders/game</th><th class="num">Losses decided here</th></tr></thead><tbody>

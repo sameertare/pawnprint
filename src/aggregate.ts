@@ -64,6 +64,7 @@ export interface Aggregates {
   strongest: OpeningRow[];
   weakest: OpeningRow[];
   byTimeClass: { timeClass: string; wdl: WDL; avgAccuracy: number | null }[];
+  openingsByTimeClass: { timeClass: string; openings: OpeningRow[] }[];
   phases: PhaseStats[];
   overallAccuracy: number | null;
   tactics: {
@@ -96,17 +97,12 @@ function avg(nums: number[]): number | null {
 
 const PHASES: Phase[] = ['opening', 'middlegame', 'endgame'];
 
-export function aggregate(games: GameRecord[]): Aggregates {
-  const total = emptyWDL();
-  const byColor = { white: emptyWDL(), black: emptyWDL() };
+/** Builds the per-opening-family W/D/L + accuracy table for a set of games — shared between the
+ *  overall breakdown and each per-time-class breakdown so the two stay consistent. */
+function computeOpenings(games: GameRecord[]): OpeningRow[] {
   const openingMap = new Map<string, OpeningRow>();
-  const tcMap = new Map<string, { wdl: WDL; accs: number[] }>();
   const analyzed = games.filter((g) => g.analyzed);
-
   for (const g of games) {
-    addResult(total, g);
-    addResult(g.userColor === 'w' ? byColor.white : byColor.black, g);
-
     let row = openingMap.get(g.family);
     if (!row) {
       row = {
@@ -119,27 +115,44 @@ export function aggregate(games: GameRecord[]): Aggregates {
     if (g.userColor === 'w') row.asWhite++;
     else row.asBlack++;
     if (g.eco && !row.eco) row.eco = g.eco;
-
-    let tc = tcMap.get(g.timeClass);
-    if (!tc) {
-      tc = { wdl: emptyWDL(), accs: [] };
-      tcMap.set(g.timeClass, tc);
-    }
-    addResult(tc.wdl, g);
-    if (g.accuracy.overall !== null) tc.accs.push(g.accuracy.overall);
   }
-
   for (const row of openingMap.values()) {
     const inFam = analyzed.filter((g) => g.family === row.family);
     row.avgAccuracy = avg(inFam.map((g) => g.accuracy.overall).filter((x): x is number => x !== null));
     row.avgOpeningAccuracy = avg(inFam.map((g) => g.accuracy.opening).filter((x): x is number => x !== null));
   }
+  return [...openingMap.values()].sort((a, b) => b.games - a.games);
+}
 
-  const openings = [...openingMap.values()].sort((a, b) => b.games - a.games);
+export function aggregate(games: GameRecord[]): Aggregates {
+  const total = emptyWDL();
+  const byColor = { white: emptyWDL(), black: emptyWDL() };
+  const tcMap = new Map<string, { wdl: WDL; accs: number[]; games: GameRecord[] }>();
+  const analyzed = games.filter((g) => g.analyzed);
+
+  for (const g of games) {
+    addResult(total, g);
+    addResult(g.userColor === 'w' ? byColor.white : byColor.black, g);
+
+    let tc = tcMap.get(g.timeClass);
+    if (!tc) {
+      tc = { wdl: emptyWDL(), accs: [], games: [] };
+      tcMap.set(g.timeClass, tc);
+    }
+    addResult(tc.wdl, g);
+    if (g.accuracy.overall !== null) tc.accs.push(g.accuracy.overall);
+    tc.games.push(g);
+  }
+
+  const openings = computeOpenings(games);
   const ranked = openings.filter((o) => o.games >= 2);
   const byScore = [...ranked].sort((a, b) => scorePct(b) - scorePct(a) || b.games - a.games);
   const strongest = byScore.filter((o) => scorePct(o) >= 50).slice(0, 5);
   const weakest = [...byScore].reverse().filter((o) => scorePct(o) < 50).slice(0, 5);
+
+  const openingsByTimeClass = [...tcMap.entries()]
+    .map(([timeClass, v]) => ({ timeClass, openings: computeOpenings(v.games) }))
+    .filter((t) => t.openings.length > 0);
 
   // Phase stats
   const phases: PhaseStats[] = PHASES.map((phase) => {
@@ -243,6 +256,9 @@ export function aggregate(games: GameRecord[]): Aggregates {
     byTimeClass: [...tcMap.entries()]
       .map(([timeClass, v]) => ({ timeClass, wdl: v.wdl, avgAccuracy: avg(v.accs) }))
       .sort((a, b) => b.wdl.games - a.wdl.games),
+    openingsByTimeClass: openingsByTimeClass.sort(
+      (a, b) => b.openings.reduce((s, o) => s + o.games, 0) - a.openings.reduce((s, o) => s + o.games, 0)
+    ),
     phases, overallAccuracy, tactics, patterns, recommendations,
     analyzedCount: analyzed.length,
   };

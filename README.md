@@ -25,7 +25,7 @@ The player the report is for is **auto-detected**, not picked from a dropdown: w
 
 ## What it analyzes
 
-- **Openings** — every opening played, with W/D/L, score %, colour split and accuracy; **strongest** and **weakest** openings called out in their own tables.
+- **Openings** — every opening played, with W/D/L, score %, colour split and accuracy; **strongest** and **weakest** openings called out in their own tables. When games span more than one time control, an **Openings by time control** section repeats the same breakdown per Bullet/Blitz/Rapid/Classical/Daily — a repertoire that scores well in Rapid can fall apart under Bullet's time pressure, and the aggregate-only view would hide that.
 - **Game phases** — separate accuracy, inaccuracy/mistake/blunder counts for **opening / middlegame / endgame**, plus which phase decided each loss.
 - **Endgames** — which endgame types you reach (rook, pawn, queen…) and your record in each.
 - **Tactics** — missed wins, missed forced mates, missed tactical shots (engine's best was an unplayed capture/check), and your biggest single-move swings.

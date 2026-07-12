@@ -62,6 +62,16 @@ export function renderMarkdown(agg: Aggregates, games: GameRecord[], meta: Repor
   }
   md.push('');
 
+  if (a.openingsByTimeClass.length > 1) {
+    md.push('### Openings by time control');
+    md.push('');
+    for (const tc of a.openingsByTimeClass) {
+      md.push(`**${tc.timeClass}**`);
+      md.push('');
+      md.push(openingTable(tc.openings));
+    }
+  }
+
   md.push('## 4. Game-phase breakdown');
   md.push('');
   md.push('| Phase | Avg Accuracy | Inaccuracies | Mistakes | Blunders | Blunders/game | Losses decided here |');
