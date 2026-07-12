@@ -1,7 +1,10 @@
 /** Presentation-only chessboard: renders from FEN, supports highlights, a move arrow, and click callbacks. */
 
+// The uppercase (white) Unicode chess glyphs (♔♕♖♗♘♙) render as hollow outlines in most fonts,
+// while the lowercase (black) ones (♚♛♜♝♞♟) render solid/filled — a font quirk, not a color
+// choice. Using the same filled glyph shape for both and telling them apart purely by CSS color
+// (like a real board) avoids white pieces looking hollow regardless of fill color.
 const GLYPHS: Record<string, string> = {
-  P: '♙', N: '♘', B: '♗', R: '♖', Q: '♕', K: '♔',
   p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚',
 };
 
@@ -99,7 +102,7 @@ export class Board {
           (fi === 0 ? `<span class="coord rank">${ranks[ri]}</span>` : '') +
           (ri === 7 ? `<span class="coord file">${files[fi]}</span>` : '');
         html += `<div class="${cls.join(' ')}" data-sq="${sq}">${coord}${
-          piece ? `<span class="pc ${piece === piece.toUpperCase() ? 'white' : 'black'}">${GLYPHS[piece]}</span>` : ''
+          piece ? `<span class="pc ${piece === piece.toUpperCase() ? 'white' : 'black'}">${GLYPHS[piece.toLowerCase()]}</span>` : ''
         }</div>`;
       }
     }
