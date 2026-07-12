@@ -607,7 +607,7 @@ function renderRounds(t: Tournament) {
     b.addEventListener('click', () => {
       const t2 = cur();
       if (!t2) return;
-      const row = b.closest('tr')!;
+      const row = b.closest('.advanced-row')!;
       const select = row.querySelector('.swap-bye-select') as HTMLSelectElement;
       const otherId = parseInt(select.value, 10);
       if (!select.value || !Number.isFinite(otherId)) { alert('Pick a player to swap the bye with.'); return; }
