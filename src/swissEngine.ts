@@ -492,72 +492,117 @@ function priorMeetingRound(t: Tournament, aId: number, bId: number, beforeRound:
   return null;
 }
 
+export type ColorDue = { code: 'W' | 'WW' | 'B' | 'BB'; color: Color; why: string };
+
+export interface PairingDetail {
+  kind: 'bye' | 'game';
+  bye?: { name: string; score: number; requested: boolean };
+  white?: { id: number; name: string; score: number; historyText: string; due: ColorDue | null; preferenceMet: boolean | null };
+  black?: { id: number; name: string; score: number; historyText: string; due: ColorDue | null; preferenceMet: boolean | null };
+  sameScoreGroup?: boolean;
+  floatedId?: number | null; // player who floated down, if any
+  colorReason?: string;
+  rematchRound?: number | null;
+  familyLabel?: string | null;
+}
+
+function colorDue(h: Color[]): ColorDue | null {
+  const bal = h.filter((c) => c === 'w').length - h.filter((c) => c === 'b').length;
+  const lastTwo = h.slice(-2);
+  if (lastTwo.length === 2 && lastTwo[0] === lastTwo[1]) return lastTwo[1] === 'w' ? { code: 'BB', color: 'b', why: 'avoids a third White in a row' } : { code: 'WW', color: 'w', why: 'avoids a third Black in a row' };
+  if (bal <= -2) return { code: 'WW', color: 'w', why: 'strongly corrects the White–Black imbalance' };
+  if (bal >= 2) return { code: 'BB', color: 'b', why: 'strongly corrects the White–Black imbalance' };
+  if (bal < 0) return { code: 'W', color: 'w', why: 'equalizes the White–Black balance' };
+  if (bal > 0) return { code: 'B', color: 'b', why: 'equalizes the White–Black balance' };
+  const last = h[h.length - 1];
+  return last ? { code: last === 'w' ? 'B' : 'W', color: last === 'w' ? 'b' : 'w', why: 'alternates the previous color' } : null;
+}
+
 /**
- * Human-readable reasons a board (or bye) was paired the way it was — score-group membership,
- * color-balance history, and rematch status. Reconstructed after the fact from the tournament's
+ * Structured facts behind a board (or bye) pairing — score-group membership, color-due history,
+ * rematch status, and family-group status. Reconstructed after the fact from the tournament's
  * round history rather than the pairing algorithm's internal trace, so it states the objective
- * facts of the match-up rather than every
- * tiebreak the algorithm weighed internally. Works for any round, not just the latest.
+ * facts of the match-up rather than every tiebreak the algorithm weighed internally. Works for
+ * any round, not just the latest. `explainPairing` below turns this into prose; the Swiss UI's
+ * per-board diagram renders it directly.
  */
-export function explainPairing(t: Tournament, roundNo: number, board: number): string[] {
+export function explainPairingDetail(t: Tournament, roundNo: number, board: number): PairingDetail | null {
   const round = t.rounds[roundNo - 1];
-  if (!round) return [];
+  if (!round) return null;
   const pr = round.pairings.find((p) => p.board === board);
-  if (!pr) return [];
+  if (!pr) return null;
   const byId = new Map(t.players.map((p) => [p.id, p]));
 
   if (pr.byeId != null) {
     const p = byId.get(pr.byeId);
-    if (!p) return [];
+    if (!p) return null;
     const score = scoreBeforeRound(t, p.id, roundNo);
     const requested = (pr.byePoints ?? 1) === 0.5;
-    return [
-      requested
-        ? `${p.name} requested to sit out Round ${roundNo} and received a half-point bye.`
-        : `${p.name} received the round's bye — the lowest-standing player (by score, then rating) who hadn't already had one, needed because the field was odd.`,
-      `Entered the round with ${score} point(s).`,
-    ];
+    return { kind: 'bye', bye: { name: p.name, score, requested } };
   }
 
   const w = byId.get(pr.whiteId!);
   const b = byId.get(pr.blackId!);
-  if (!w || !b) return [];
+  if (!w || !b) return null;
   const wScore = scoreBeforeRound(t, w.id, roundNo);
   const bScore = scoreBeforeRound(t, b.id, roundNo);
   const wHist = colorHistoryBeforeRound(t, w.id, roundNo);
   const bHist = colorHistoryBeforeRound(t, b.id, roundNo);
   const summarize = (h: Color[]) => (h.length ? `${h.filter((c) => c === 'w').length}W-${h.filter((c) => c === 'b').length}B` : 'none yet');
   const priorRound = priorMeetingRound(t, w.id, b.id, roundNo);
-  const balance = (h: Color[]) => h.filter((c) => c === 'w').length - h.filter((c) => c === 'b').length;
-  const due = (h: Color[]) => {
-    const bal = balance(h);
-    const lastTwo = h.slice(-2);
-    if (lastTwo.length === 2 && lastTwo[0] === lastTwo[1]) return lastTwo[1] === 'w' ? { code: 'BB', color: 'b' as Color, why: 'avoids a third White in a row' } : { code: 'WW', color: 'w' as Color, why: 'avoids a third Black in a row' };
-    if (bal <= -2) return { code: 'WW', color: 'w' as Color, why: 'strongly corrects the White–Black imbalance' };
-    if (bal >= 2) return { code: 'BB', color: 'b' as Color, why: 'strongly corrects the White–Black imbalance' };
-    if (bal < 0) return { code: 'W', color: 'w' as Color, why: 'equalizes the White–Black balance' };
-    if (bal > 0) return { code: 'B', color: 'b' as Color, why: 'equalizes the White–Black balance' };
-    const last = h[h.length - 1];
-    return last ? { code: last === 'w' ? 'B' : 'W', color: last === 'w' ? 'b' as Color : 'w' as Color, why: 'alternates the previous color' } : null;
-  };
-  const wDue = due(wHist);
-  const bDue = due(bHist);
-  const dueText = (p: Player, d: ReturnType<typeof due>) => d ? `${p.name}: ${d.code} (${d.why})` : `${p.name}: no color due yet`;
-  const met = (p: Player, d: ReturnType<typeof due>, assigned: Color) => !d ? null : `${p.name}'s ${d.code} preference was ${d.color === assigned ? 'met' : 'not met'}`;
-  const colorReason = [met(w, wDue, 'w'), met(b, bDue, 'b')].filter((x): x is string => x != null).join('; ') || 'neither player had a prior color due, so the deterministic fallback assigned White to the listed White player';
+  const wDue = colorDue(wHist);
+  const bDue = colorDue(bHist);
+  const met = (d: ColorDue | null, assigned: Color) => (d ? d.color === assigned : null);
+  const metText = (name: string, d: ColorDue | null, assigned: Color) => (!d ? null : `${name}'s ${d.code} preference was ${d.color === assigned ? 'met' : 'not met'}`);
+  const colorReason = [metText(w.name, wDue, 'w'), metText(b.name, bDue, 'b')].filter((x): x is string => x != null).join('; ') || 'neither player had a prior color due, so the deterministic fallback assigned White to the listed White player';
 
+  const familyGroup = sameFamilyGroup(t, w.id, b.id)
+    ? t.familyGroups.find((g) => g.playerIds.includes(w.id) && g.playerIds.includes(b.id))
+    : null;
+
+  return {
+    kind: 'game',
+    white: { id: w.id, name: w.name, score: wScore, historyText: summarize(wHist), due: wDue, preferenceMet: met(wDue, 'w') },
+    black: { id: b.id, name: b.name, score: bScore, historyText: summarize(bHist), due: bDue, preferenceMet: met(bDue, 'b') },
+    sameScoreGroup: wScore === bScore,
+    floatedId: wScore === bScore ? null : wScore > bScore ? w.id : b.id,
+    colorReason,
+    rematchRound: priorRound,
+    familyLabel: familyGroup ? (familyGroup.label ?? 'a family group') : null,
+  };
+}
+
+/**
+ * Human-readable reasons a board (or bye) was paired the way it was. Prose rendering of
+ * `explainPairingDetail`.
+ */
+export function explainPairing(t: Tournament, roundNo: number, board: number): string[] {
+  const d = explainPairingDetail(t, roundNo, board);
+  if (!d) return [];
+
+  if (d.kind === 'bye') {
+    const bye = d.bye!;
+    return [
+      bye.requested
+        ? `${bye.name} requested to sit out Round ${roundNo} and received a half-point bye.`
+        : `${bye.name} received the round's bye — the lowest-standing player (by score, then rating) who hadn't already had one, needed because the field was odd.`,
+      `Entered the round with ${bye.score} point(s).`,
+    ];
+  }
+
+  const { white: w, black: b } = d;
+  const dueText = (p: { name: string }, due: ColorDue | null) => (due ? `${p.name}: ${due.code} (${due.why})` : `${p.name}: no color due yet`);
   const lines = [
-    wScore === bScore
-      ? `Both entered Round ${roundNo} with ${wScore} point(s) — paired within the same score group.`
-      : `${wScore > bScore ? w.name : b.name} entered with ${Math.max(wScore, bScore)} point(s) and floated down to pair against ${wScore > bScore ? b.name : w.name} (${Math.min(wScore, bScore)} point(s)), needed to complete an odd bracket.`,
-    `Color history before this round — ${w.name}: ${summarize(wHist)}. ${b.name}: ${summarize(bHist)}.`,
-    `Color due before assignment — ${dueText(w, wDue)}. ${dueText(b, bDue)}.`,
-    `Color decision — ${colorReason}.`,
-    priorRound ? `Rematch — they also played in Round ${priorRound}. Paired again only because no rematch-free pairing was available.` : 'First meeting between these two players.',
+    d.sameScoreGroup
+      ? `Both entered Round ${roundNo} with ${w!.score} point(s) — paired within the same score group.`
+      : `${d.floatedId === w!.id ? w!.name : b!.name} entered with ${Math.max(w!.score, b!.score)} point(s) and floated down to pair against ${d.floatedId === w!.id ? b!.name : w!.name} (${Math.min(w!.score, b!.score)} point(s)), needed to complete an odd bracket.`,
+    `Color history before this round — ${w!.name}: ${w!.historyText}. ${b!.name}: ${b!.historyText}.`,
+    `Color due before assignment — ${dueText(w!, w!.due)}. ${dueText(b!, b!.due)}.`,
+    `Color decision — ${d.colorReason}.`,
+    d.rematchRound ? `Rematch — they also played in Round ${d.rematchRound}. Paired again only because no rematch-free pairing was available.` : 'First meeting between these two players.',
   ];
-  if (sameFamilyGroup(t, w.id, b.id)) {
-    const group = t.familyGroups.find((g) => g.playerIds.includes(w.id) && g.playerIds.includes(b.id));
-    lines.push(`${w.name} and ${b.name} are marked as "${group?.label ?? 'a family group'}" — paired anyway because no conflict-free pairing was available this round.`);
+  if (d.familyLabel) {
+    lines.push(`${w!.name} and ${b!.name} are marked as "${d.familyLabel}" — paired anyway because no conflict-free pairing was available this round.`);
   }
   return lines;
 }

@@ -463,6 +463,13 @@ a { color: var(--blue); }
 .player-chip.floated { border-color: var(--gold); }
 .float-arrow { color: var(--gold); font-weight: 700; }
 
+.pairing-diagram { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.pairing-diagram .score-group-row { margin-top: 0; }
+.pairing-diagram .color-flow { margin-top: 10px; }
+.pairing-flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pairing-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--bg-inset); border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; font-size: 0.8rem; color: var(--text-dim); }
+.pairing-badge.warn { border-color: var(--gold); color: var(--text); }
+
 #bye-request-details summary { cursor: pointer; list-style: none; }
 #bye-request-details summary::-webkit-details-marker { display: none; }
 #bye-request-details summary h2 { display: inline-flex; align-items: center; gap: 8px; }

@@ -1,7 +1,7 @@
 import './style.css';
 import {
   addExtraGameForBye, addFamilyGroup, cancelByeRequest, commitRound, createTournament,
-  explainPairing, explainRound, isNwchessRoster, nextRoundNumber, pairNextRound, parseRoster,
+  explainPairing, explainPairingDetail, explainRound, isNwchessRoster, nextRoundNumber, pairNextRound, parseRoster,
   recommendedRounds, removeFamilyGroup, requestByeForRound, setResult, standings,
   swapByeWithPlayer, swapColors, swapPlayersAcrossBoards,
 } from './swissEngine';
@@ -482,6 +482,63 @@ function renderSectionTabs() {
   );
 }
 
+/** Diagram for a single board's pairing: which score group each player entered with (with a ⇣
+ *  float marker if one of them dropped down a group), a color-due flow showing what each player
+ *  was due and whether they got it, and badges for rematch / family-group status. The per-board
+ *  counterpart to roundMethodologyHtml's whole-round view — same visual language, zoomed to one
+ *  pairing so a TD can see exactly which criteria produced this specific board. */
+function pairingDiagramHtml(t: Tournament, roundNo: number, board: number): string {
+  const d = explainPairingDetail(t, roundNo, board);
+  if (!d) return '';
+
+  if (d.kind === 'bye') {
+    const bye = d.bye!;
+    return `<div class="pairing-diagram">
+      <div class="score-group-row">
+        <div class="score-group-label">${bye.score} pt${bye.score === 1 ? '' : 's'}</div>
+        <div class="score-group-players"><span class="player-chip">${esc(bye.name)} <span class="hint">(${bye.requested ? '+½ requested bye' : '+1 field-odd bye'})</span></span></div>
+      </div>
+    </div>`;
+  }
+
+  const w = d.white!;
+  const b = d.black!;
+  const wFloated = d.floatedId === w.id;
+  const bFloated = d.floatedId === b.id;
+  const floatArrow = (score: number) => `<span class="float-arrow" title="Floated down from the ${score} pt group to complete an odd bracket">⇣</span> `;
+  const scoreRow = `<div class="score-group-row">
+      <div class="score-group-label">Score groups</div>
+      <div class="score-group-players">
+        <span class="player-chip${wFloated ? ' floated' : ''}">${wFloated ? floatArrow(w.score) : ''}♔ ${esc(w.name)} · ${w.score} pt${w.score === 1 ? '' : 's'}</span>
+        <span class="player-chip${bFloated ? ' floated' : ''}">${bFloated ? floatArrow(b.score) : ''}♚ ${esc(b.name)} · ${b.score} pt${b.score === 1 ? '' : 's'}</span>
+      </div>
+    </div>`;
+
+  const dueLabel = (p: { due: { code: string; why: string } | null }) => (p.due ? `${p.due.code} — ${p.due.why}` : 'no color due yet');
+  const gotLabel = (p: { preferenceMet: boolean | null }, color: 'White' | 'Black') =>
+    p.preferenceMet == null ? `No prior preference — assigned ${color}` : p.preferenceMet ? `Got the color it was due (${color})` : `Preference not met — assigned ${color} anyway`;
+  const colorFlow = `<div class="color-flow">
+      <span>${esc(w.name)}: ${esc(dueLabel(w))}</span><b>→</b><span>${esc(gotLabel(w, 'White'))}</span>
+      <span>${esc(b.name)}: ${esc(dueLabel(b))}</span><b>→</b><span>${esc(gotLabel(b, 'Black'))}</span>
+    </div>`;
+
+  const badges = [
+    d.rematchRound
+      ? `<span class="pairing-badge warn">🔁 Rematch — also played Round ${d.rematchRound}, paired again only because no rematch-free option existed</span>`
+      : `<span class="pairing-badge">🆕 First meeting between these two</span>`,
+  ];
+  if (d.familyLabel) {
+    badges.push(`<span class="pairing-badge warn">⚠ Family group "${esc(d.familyLabel)}" — paired anyway, no conflict-free option existed</span>`);
+  }
+
+  return `<div class="pairing-diagram">
+    ${scoreRow}
+    ${colorFlow}
+    <p class="hint" style="margin:6px 0 0;">${esc(d.colorReason ?? '')}</p>
+    <div class="pairing-flags">${badges.join('')}</div>
+  </div>`;
+}
+
 /** Whole-round methodology diagram: every player grouped by the score they entered the round
  *  with, a ⇣ marker on whoever floated down to complete an odd bracket, and a note for any
  *  rematch or family-group conflict that couldn't be avoided this round. */
@@ -544,9 +601,12 @@ function renderRounds(t: Tournament) {
           const isExplaining = explainingFor?.round === round.number && explainingFor?.board === pr.board;
           const explainBtn = `<button class="btn-icon explain-btn" data-round="${round.number}" data-board="${pr.board}" title="Why this pairing?">ⓘ</button>`;
           const explainRow = isExplaining
-            ? `<tr class="explain-row"><td></td><td colspan="3"><ul class="pattern-list">${explainPairing(t, round.number, pr.board)
-                .map((line) => `<li>${esc(line)}</li>`)
-                .join('')}</ul></td></tr>`
+            ? `<tr class="explain-row"><td></td><td colspan="3">
+                ${pairingDiagramHtml(t, round.number, pr.board)}
+                <ul class="pattern-list">${explainPairing(t, round.number, pr.board)
+                  .map((line) => `<li>${esc(line)}</li>`)
+                  .join('')}</ul>
+              </td></tr>`
             : '';
           if (pr.byeId != null) {
             const pts = pr.byePoints ?? 1;
