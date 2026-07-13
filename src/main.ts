@@ -5,6 +5,7 @@ import { Engine } from './engine';
 import { analyzeGame, positionsNeeded } from './analyze';
 import { aggregate, scorePct, themeUrl, opponentList, headToHeadWithOpponent } from './aggregate';
 import type { Aggregates, OpeningRow, WDL, HeadToHeadOpponent } from './aggregate';
+import { assessGame } from './gameAssessment';
 import { mergeGames, parseMarkdownReport, renderMarkdown } from './markdown';
 import type { GameRecord, ReportData, ReportMeta } from './types';
 import { renderSparklineSvg } from './sparkline';
@@ -299,6 +300,7 @@ function openingTableHtml(rows: OpeningRow[], emptyMsg: string): string {
 
 function h2hBodyHtml(h2h: HeadToHeadOpponent): string {
   if (!h2h.games.length) return '<p class="section-note">No games found against this opponent.</p>';
+  const openingsByFamily = new Map(h2h.openings.map((o) => [o.family, o]));
   return `
     <div class="summary-cards">
       <div class="stat-card"><span class="big">${h2h.wdl.games}</span><span class="label">Games</span></div>
@@ -308,11 +310,39 @@ function h2hBodyHtml(h2h: HeadToHeadOpponent): string {
     <h3>Openings vs ${esc(h2h.opponent)}</h3>
     ${openingTableHtml(h2h.openings, 'No repeated openings against this opponent yet.')}
     <h3>Games</h3>
-    ${gamesTableHtml(h2h.games)}
+    ${gamesTableHtml(h2h.games, openingsByFamily)}
   `;
 }
 
-function gamesTableHtml(games: GameRecord[]): string {
+/** Renders one game's strength/weakness/overall assessment (see gameAssessment.ts) as the hidden
+ *  detail row toggled by a game table row's 🩺 button. */
+function assessmentHtml(g: GameRecord, openingsByFamily?: Map<string, OpeningRow>): string {
+  const a = assessGame(g, openingsByFamily?.get(g.family));
+  if (!a) return '<p class="section-note">No move-quality data for this game.</p>';
+  const verdictCls = (v: 'strength' | 'weakness' | 'neutral') => (v === 'strength' ? 'pos' : v === 'weakness' ? 'neg' : 'mid');
+  const verdictIcon = (v: 'strength' | 'weakness' | 'neutral') => (v === 'strength' ? '✓' : v === 'weakness' ? '✗' : '·');
+  const phaseRows = a.phases
+    .map(
+      (p) =>
+        `<li><span class="${verdictCls(p.verdict)}">${verdictIcon(p.verdict)} ${p.phase[0].toUpperCase() + p.phase.slice(1)}</span> — ${esc(p.summary)}</li>`
+    )
+    .join('');
+  const strengthsHtml = a.strengths.length
+    ? `<p><b>Strengths</b></p><ul class="pattern-list">${a.strengths.map((s) => `<li><span class="pos">✓</span> ${esc(s)}</li>`).join('')}</ul>`
+    : '';
+  const weaknessesHtml = a.weaknesses.length
+    ? `<p><b>Weaknesses</b></p><ul class="pattern-list">${a.weaknesses.map((s) => `<li><span class="neg">✗</span> ${esc(s)}</li>`).join('')}</ul>`
+    : '';
+  return `
+    <p><b>Overall:</b> ${esc(a.overall)}</p>
+    <p><b>By phase</b></p>
+    <ul class="pattern-list">${phaseRows}</ul>
+    ${strengthsHtml}
+    ${weaknessesHtml}
+  `;
+}
+
+function gamesTableHtml(games: GameRecord[], openingsByFamily?: Map<string, OpeningRow>): string {
   if (!games.length) return '<p class="section-note">No games.</p>';
   const rows = [...games]
     .sort((x, y) => y.date.localeCompare(x.date))
@@ -333,6 +363,12 @@ function gamesTableHtml(games: GameRecord[]): string {
       const pgnBtn = g.sans?.length
         ? `<button class="btn-icon pgn-dl-btn" data-id="${esc(g.id)}" title="Download annotated PGN (engine evals + notes on flagged moves)">⬇</button>`
         : '';
+      const assessBtn = g.analyzed
+        ? `<button class="btn-icon assess-btn" data-id="${esc(g.id)}" title="Strengths &amp; weaknesses">🩺</button>`
+        : '';
+      const assessRow = g.analyzed
+        ? `<tr class="explain-row assess-row" data-id="${esc(g.id)}" hidden><td></td><td colspan="6">${assessmentHtml(g, openingsByFamily)}</td></tr>`
+        : '';
       return `<tr>
         <td>${esc(g.date)}</td>
         <td>${colorGlyph} ${esc(opponent)}</td>
@@ -340,8 +376,8 @@ function gamesTableHtml(games: GameRecord[]): string {
         <td>${esc(g.family)}</td>
         <td class="num">${g.accuracy.overall != null ? g.accuracy.overall + '%' : '—'}</td>
         <td class="spark-cell">${spark}</td>
-        <td class="num">${liveLink} ${pgnBtn}</td>
-      </tr>`;
+        <td class="num">${liveLink} ${pgnBtn} ${assessBtn}</td>
+      </tr>${assessRow}`;
     })
     .join('');
   return `<div class="games-table-wrap"><table><thead><tr>
@@ -349,11 +385,12 @@ function gamesTableHtml(games: GameRecord[]): string {
     </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function renderGamesSection(games: GameRecord[]): string {
+function renderGamesSection(games: GameRecord[], openings: OpeningRow[]): string {
   if (!games.length) return '';
+  const openingsByFamily = new Map(openings.map((o) => [o.family, o]));
   return `<div class="card"><h2>📈 Games</h2>
-    ${gamesTableHtml(games)}
-    <p class="hint">The eval graph tracks the position's evaluation (white's perspective) across the whole game. Click ▶ to open a game in Live &amp; Engine and step through it move by move. Click ⬇ to download that game as a standard PGN with engine evals and flagged-move notes baked in as comments.</p>
+    ${gamesTableHtml(games, openingsByFamily)}
+    <p class="hint">The eval graph tracks the position's evaluation (white's perspective) across the whole game. Click ▶ to open a game in Live &amp; Engine and step through it move by move. Click ⬇ to download that game as a standard PGN with engine evals and flagged-move notes baked in as comments. Click 🩺 for a strengths/weaknesses breakdown of that game's opening, middlegame, and endgame.</p>
   </div>`;
 }
 
@@ -378,7 +415,7 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
     </tbody></table>
   </div>`);
 
-  html.push(renderGamesSection(records));
+  html.push(renderGamesSection(records, a.openings));
 
   const opponents = opponentList(records);
   if (opponents.length > 0) {
@@ -555,12 +592,20 @@ function mdBold(s: string): string {
 // Delegated once on the (stable) results container, since its innerHTML is fully replaced on
 // every re-render — a listener on the buttons themselves would be destroyed each time.
 resultsEl.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest('.pgn-dl-btn') as HTMLButtonElement | null;
-  if (!btn) return;
-  const rec = records.find((g) => g.id === btn.dataset.id);
-  if (!rec) return;
-  const safeName = `${rec.white}_vs_${rec.black}`.replace(/[^\w.-]/g, '_').slice(0, 60);
-  downloadPgn(`${rec.date}_${safeName}.pgn`, buildAnnotatedPgn(rec));
+  const target = e.target as HTMLElement;
+  const pgnBtn = target.closest('.pgn-dl-btn') as HTMLButtonElement | null;
+  if (pgnBtn) {
+    const rec = records.find((g) => g.id === pgnBtn.dataset.id);
+    if (!rec) return;
+    const safeName = `${rec.white}_vs_${rec.black}`.replace(/[^\w.-]/g, '_').slice(0, 60);
+    downloadPgn(`${rec.date}_${safeName}.pgn`, buildAnnotatedPgn(rec));
+    return;
+  }
+  const assessBtn = target.closest('.assess-btn') as HTMLButtonElement | null;
+  if (assessBtn) {
+    const row = assessBtn.closest('tr')?.nextElementSibling as HTMLElement | null;
+    if (row?.classList.contains('assess-row')) row.hidden = !row.hidden;
+  }
 });
 
 resultsEl.addEventListener('change', (e) => {

@@ -1,6 +1,7 @@
 import type { GameRecord, ReportData, ReportMeta } from './types';
 import type { Aggregates, OpeningRow, WDL } from './aggregate';
 import { scorePct, themeLabel, themeUrl } from './aggregate';
+import { assessGame } from './gameAssessment';
 
 const DATA_MARK_START = '<!-- chess-insight:data:v1';
 const DATA_MARK_END = 'chess-insight:end -->';
@@ -94,7 +95,46 @@ export function renderMarkdown(agg: Aggregates, games: GameRecord[], meta: Repor
     md.push('');
   }
 
-  md.push('## 5. Tactics: strengths and misses');
+  md.push('## 5. Per-game assessment');
+  md.push('');
+  md.push('_Strength, weakness, and an overall verdict for every analyzed game, broken down by opening, middlegame, and endgame. Derived from the same accuracy/error data as the sections above — nothing here is re-analyzed._');
+  md.push('');
+  const openingsByFamily = new Map(a.openings.map((o) => [o.family, o]));
+  const analyzedGames = [...games].filter((g) => g.analyzed).sort((x, y) => x.date.localeCompare(y.date));
+  if (!analyzedGames.length) {
+    md.push('_No analyzed games yet._');
+    md.push('');
+  }
+  for (const g of analyzedGames) {
+    const assessment = assessGame(g, openingsByFamily.get(g.family));
+    if (!assessment) continue;
+    const opponent = g.userColor === 'w' ? g.black : g.white;
+    const resultLabel = g.result === 'win' ? 'Win' : g.result === 'loss' ? 'Loss' : g.result === 'draw' ? 'Draw' : 'Unfinished';
+    const label = `${g.date} — ${g.userColor === 'w' ? 'White' : 'Black'} vs ${opponent} (${resultLabel}, ${g.family || 'unspecified opening'})`;
+    md.push(`### ${g.site.startsWith('http') ? `[${label}](${g.site})` : label}`);
+    md.push('');
+    md.push(`**Overall:** ${assessment.overall}`);
+    md.push('');
+    md.push('| Phase | Verdict | Accuracy | Assessment |');
+    md.push('|---|---|--:|---|');
+    for (const p of assessment.phases) {
+      const verdictLabel = p.verdict === 'strength' ? '✓ Strength' : p.verdict === 'weakness' ? '✗ Weakness' : '· Neutral';
+      md.push(`| ${p.phase[0].toUpperCase() + p.phase.slice(1)} | ${verdictLabel} | ${p.accuracy !== null ? p.accuracy + '%' : '—'} | ${p.summary} |`);
+    }
+    md.push('');
+    if (assessment.strengths.length) {
+      md.push('**Strengths:**');
+      for (const s of assessment.strengths) md.push(`- ${s}`);
+      md.push('');
+    }
+    if (assessment.weaknesses.length) {
+      md.push('**Weaknesses:**');
+      for (const s of assessment.weaknesses) md.push(`- ${s}`);
+      md.push('');
+    }
+  }
+
+  md.push('## 6. Tactics: strengths and misses');
   md.push('');
   md.push(`- Blunders: **${a.tactics.blundersTotal}** across ${a.analyzedCount} analyzed games`);
   md.push(`- Missed wins (winning position → advantage gone in one move): **${a.tactics.missedWins}**`);
@@ -115,7 +155,7 @@ export function renderMarkdown(agg: Aggregates, games: GameRecord[], meta: Repor
     md.push('');
   }
 
-  md.push('## 6. Errors in wins vs losses');
+  md.push('## 7. Errors in wins vs losses');
   md.push('');
   md.push('| | Games | Inaccuracies | Mistakes | Blunders | Blunders/game |');
   md.push('|---|--:|--:|--:|--:|--:|');
@@ -125,7 +165,7 @@ export function renderMarkdown(agg: Aggregates, games: GameRecord[], meta: Repor
   md.push(`| In losses | ${a.patterns.analyzedLosses} | ${l.inaccuracies} | ${l.mistakes} | ${l.blunders} | ${per(l.blunders, a.patterns.analyzedLosses)} |`);
   md.push('');
 
-  md.push('## 7. Patterns detected');
+  md.push('## 8. Patterns detected');
   md.push('');
   if (a.patterns.narrative.length) {
     for (const n of a.patterns.narrative) md.push(`- ${n}`);
@@ -144,7 +184,7 @@ export function renderMarkdown(agg: Aggregates, games: GameRecord[], meta: Repor
     md.push('');
   }
 
-  md.push('## 8. Training recommendations');
+  md.push('## 9. Training recommendations');
   md.push('');
   if (!a.recommendations.length) {
     md.push('_Analyze games with the engine to unlock personalized recommendations._');
@@ -160,7 +200,7 @@ export function renderMarkdown(agg: Aggregates, games: GameRecord[], meta: Repor
     md.push('');
   }
 
-  md.push('## 9. Analysis history');
+  md.push('## 10. Analysis history');
   md.push('');
   for (const s of meta.sessions) {
     md.push(`- ${s.date}: +${s.gamesAdded} games (${s.source})`);
