@@ -321,22 +321,38 @@ function lastColor(p: Player): Color | null {
   return p.colors.length ? p.colors[p.colors.length - 1] : null;
 }
 
+type ColorPreference = { color: Color; strength: 1 | 2 | 3; label: 'alternation' | 'equalization' | 'consecutive-colors' } | null;
+
+/**
+ * Color due: a third consecutive color or a +/-2 imbalance is strongest;
+ * a one-color imbalance is next; alternation is the lightest preference. Byes have no color
+ * because they never enter `colors`.
+ */
+function colorPreference(p: Player): ColorPreference {
+  const balance = colorBalance(p);
+  const lastTwo = p.colors.slice(-2);
+  if (lastTwo.length === 2 && lastTwo[0] === lastTwo[1]) {
+    return { color: lastTwo[1] === 'w' ? 'b' : 'w', strength: 3, label: 'consecutive-colors' };
+  }
+  if (balance <= -2) return { color: 'w', strength: 3, label: 'equalization' };
+  if (balance >= 2) return { color: 'b', strength: 3, label: 'equalization' };
+  if (balance < 0) return { color: 'w', strength: 2, label: 'equalization' };
+  if (balance > 0) return { color: 'b', strength: 2, label: 'equalization' };
+  const last = lastColor(p);
+  return last ? { color: last === 'w' ? 'b' : 'w', strength: 1, label: 'alternation' } : null;
+}
+
 /** Decide who gets white in a pairing between a (higher seed) and b. */
 function assignColors(a: Player, b: Player): { whiteId: number; blackId: number } {
-  const balA = colorBalance(a);
-  const balB = colorBalance(b);
-  let aWhite: boolean;
-  if (balA !== balB) {
-    aWhite = balA < balB; // the one owed white (more negative balance) gets white
-  } else {
-    // Equal balance: honour alternation (opposite of each player's last color), if either has one.
-    const wantA = lastColor(a) === 'w' ? 'b' : lastColor(a) === 'b' ? 'w' : null;
-    const wantB = lastColor(b) === 'w' ? 'b' : lastColor(b) === 'b' ? 'w' : null;
-    if (wantA && !wantB) aWhite = wantA === 'w';
-    else if (wantB && !wantA) aWhite = wantB === 'b'; // b's preference determines a's color by elimination
-    else if (wantA && wantB && wantA !== wantB) aWhite = wantA === 'w';
-    else aWhite = a.id < b.id; // both no preference, or a genuine same-color conflict: fall back to seed
-  }
+  const pa = colorPreference(a);
+  const pb = colorPreference(b);
+  const score = (aColor: Color, bColor: Color) =>
+    (pa?.color === aColor ? pa.strength : 0) + (pb?.color === bColor ? pb.strength : 0);
+  const aWhiteScore = score('w', 'b');
+  const bWhiteScore = score('b', 'w');
+  // In a true tie, the higher-seeded player (the first player in a bracket pair) wins the
+  // preference, using a deterministic last-resort instead of a random coin flip.
+  const aWhite = aWhiteScore === bWhiteScore ? a.id < b.id : aWhiteScore > bWhiteScore;
   return aWhite ? { whiteId: a.id, blackId: b.id } : { whiteId: b.id, blackId: a.id };
 }
 
@@ -480,7 +496,7 @@ function priorMeetingRound(t: Tournament, aId: number, bId: number, beforeRound:
  * Human-readable reasons a board (or bye) was paired the way it was — score-group membership,
  * color-balance history, and rematch status. Reconstructed after the fact from the tournament's
  * round history rather than the pairing algorithm's internal trace, so it states the objective
- * facts of the match-up (in the spirit of SwissSys's pairing explanations) rather than every
+ * facts of the match-up rather than every
  * tiebreak the algorithm weighed internally. Works for any round, not just the latest.
  */
 export function explainPairing(t: Tournament, roundNo: number, board: number): string[] {
@@ -512,20 +528,31 @@ export function explainPairing(t: Tournament, roundNo: number, board: number): s
   const bHist = colorHistoryBeforeRound(t, b.id, roundNo);
   const summarize = (h: Color[]) => (h.length ? `${h.filter((c) => c === 'w').length}W-${h.filter((c) => c === 'b').length}B` : 'none yet');
   const priorRound = priorMeetingRound(t, w.id, b.id, roundNo);
-
-  const balOf = (h: Color[]) => h.filter((c) => c === 'w').length - h.filter((c) => c === 'b').length;
-  const wBal = balOf(wHist);
-  const bBal = balOf(bHist);
-  const colorReason =
-    wBal !== bBal
-      ? `${wBal < bBal ? w.name : b.name} had the more negative color balance (owed White) and got it.`
-      : `Color balance was tied (${wBal >= 0 ? '+' : ''}${wBal} each), so it came down to alternating each player's last color, or seed order if that was also tied.`;
+  const balance = (h: Color[]) => h.filter((c) => c === 'w').length - h.filter((c) => c === 'b').length;
+  const due = (h: Color[]) => {
+    const bal = balance(h);
+    const lastTwo = h.slice(-2);
+    if (lastTwo.length === 2 && lastTwo[0] === lastTwo[1]) return lastTwo[1] === 'w' ? { code: 'BB', color: 'b' as Color, why: 'avoids a third White in a row' } : { code: 'WW', color: 'w' as Color, why: 'avoids a third Black in a row' };
+    if (bal <= -2) return { code: 'WW', color: 'w' as Color, why: 'strongly corrects the White–Black imbalance' };
+    if (bal >= 2) return { code: 'BB', color: 'b' as Color, why: 'strongly corrects the White–Black imbalance' };
+    if (bal < 0) return { code: 'W', color: 'w' as Color, why: 'equalizes the White–Black balance' };
+    if (bal > 0) return { code: 'B', color: 'b' as Color, why: 'equalizes the White–Black balance' };
+    const last = h[h.length - 1];
+    return last ? { code: last === 'w' ? 'B' : 'W', color: last === 'w' ? 'b' as Color : 'w' as Color, why: 'alternates the previous color' } : null;
+  };
+  const wDue = due(wHist);
+  const bDue = due(bHist);
+  const dueText = (p: Player, d: ReturnType<typeof due>) => d ? `${p.name}: ${d.code} (${d.why})` : `${p.name}: no color due yet`;
+  const met = (p: Player, d: ReturnType<typeof due>, assigned: Color) => !d ? null : `${p.name}'s ${d.code} preference was ${d.color === assigned ? 'met' : 'not met'}`;
+  const colorReason = [met(w, wDue, 'w'), met(b, bDue, 'b')].filter((x): x is string => x != null).join('; ') || 'neither player had a prior color due, so the deterministic fallback assigned White to the listed White player';
 
   const lines = [
     wScore === bScore
       ? `Both entered Round ${roundNo} with ${wScore} point(s) — paired within the same score group.`
       : `${wScore > bScore ? w.name : b.name} entered with ${Math.max(wScore, bScore)} point(s) and floated down to pair against ${wScore > bScore ? b.name : w.name} (${Math.min(wScore, bScore)} point(s)), needed to complete an odd bracket.`,
-    `Color history before this round — ${w.name}: ${summarize(wHist)}. ${b.name}: ${summarize(bHist)}. ${colorReason}`,
+    `Color history before this round — ${w.name}: ${summarize(wHist)}. ${b.name}: ${summarize(bHist)}.`,
+    `Color due before assignment — ${dueText(w, wDue)}. ${dueText(b, bDue)}.`,
+    `Color decision — ${colorReason}.`,
     priorRound ? `Rematch — they also played in Round ${priorRound}. Paired again only because no rematch-free pairing was available.` : 'First meeting between these two players.',
   ];
   if (sameFamilyGroup(t, w.id, b.id)) {
