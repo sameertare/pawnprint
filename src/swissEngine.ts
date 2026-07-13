@@ -118,7 +118,15 @@ function parseNwchessRoster(text: string): RosterEntry[] {
 }
 
 function splitDelimited(line: string, kind: 'tab' | 'csv' | 'space'): string[] {
-  if (kind === 'tab') return line.split('\t');
+  if (kind === 'tab') {
+    if (line.includes('\t')) return line.split('\t');
+    // This one row lost its tabs — e.g. hand-typed or re-aligned with spaces instead of pasted
+    // from a spreadsheet like the rest of the file. Falling back to splitting on runs of 2+
+    // spaces (when present) keeps the row from silently vanishing just because it doesn't match
+    // the delimiter the header happened to use.
+    if (/\s{2,}/.test(line)) return line.split(/\s{2,}/);
+    return [line];
+  }
   if (kind === 'csv') return parseCsvLine(line);
   return line.split(/\s{2,}/);
 }
