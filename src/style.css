@@ -380,6 +380,10 @@ a { color: var(--blue); }
 .spark-cell { width: 150px; height: 32px; padding: 2px 8px !important; }
 .spark-cell svg { width: 140px; height: 28px; }
 .games-table-wrap a { text-decoration: none; font-size: 1.1rem; }
+.games-pagination { align-items: center; gap: 12px; margin: 0 0 8px; }
+.games-pagination:last-child { margin: 8px 0 0; }
+.games-pagination label { flex-direction: row; align-items: center; gap: 6px; }
+.games-pagination select { padding: 3px 8px; }
 
 /* ---------- line charts (trend chart, time-usage chart) ---------- */
 .chart-wrap { margin-top: 8px; }

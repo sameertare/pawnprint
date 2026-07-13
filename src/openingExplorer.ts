@@ -35,7 +35,12 @@ function active(): Profile { return profiles[mode]; }
 let tree: TreeNode | null = null;
 let path: string[] = []; // SAN path from root to the currently viewed node
 let minGames = 2;
-const MAX_GAMES_SHOWN = 50; // cap the "games reaching this position" list for very popular nodes
+
+// "Games reaching this position" pagination — reset to page 1 whenever the viewed node changes,
+// but preserved across a page-size change or Prev/Next click (both just re-run renderGamesHere).
+let gamesPageSize: number | 'all' = 50;
+let gamesPage = 0;
+let gamesPagePathKey: string | null = null;
 
 // ---------- dom ----------
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -466,7 +471,18 @@ function renderGamesHere(node: TreeNode) {
     gamesHereEl.innerHTML = `<p class="hint">No games reached this position.</p>`;
     return;
   }
-  const shown = refs.slice(0, MAX_GAMES_SHOWN);
+
+  // A different node than last render (moved to a new position in the tree) starts back at
+  // page 1; re-rendering the same node for a page-size change or Prev/Next keeps the page.
+  const pathKey = path.join('>');
+  if (pathKey !== gamesPagePathKey) { gamesPage = 0; gamesPagePathKey = pathKey; }
+
+  const pageSize = gamesPageSize === 'all' ? refs.length : gamesPageSize;
+  const totalPages = Math.max(1, Math.ceil(refs.length / pageSize));
+  gamesPage = Math.min(gamesPage, totalPages - 1);
+  const start = gamesPage * pageSize;
+  const shown = refs.slice(start, start + pageSize);
+
   const resultLabel = (r: Result) => (r === 'win' ? 'Win' : r === 'loss' ? 'Loss' : r === 'draw' ? 'Draw' : '—');
   const resultClass = (r: Result) => (r === 'win' ? 'pos' : r === 'loss' ? 'neg' : r === 'draw' ? 'mid' : '');
   const rows = shown
@@ -482,16 +498,42 @@ function renderGamesHere(node: TreeNode) {
         <td colspan="5"><div class="game-moves"><p>${esc(formatMoves(g.sans))}</p></div></td>
       </tr>`)
     .join('');
-  const more = refs.length > MAX_GAMES_SHOWN
-    ? `<p class="hint" style="margin-top:8px;">+ ${refs.length - MAX_GAMES_SHOWN} more game(s) not shown.</p>`
-    : '';
+
+  const pageSizeOptions = [50, 100, 250] as const;
+  const pagination = `
+    <div class="games-pagination config-row">
+      <label>Show
+        <select class="games-page-size">
+          ${pageSizeOptions.map((n) => `<option value="${n}"${gamesPageSize === n ? ' selected' : ''}>${n}</option>`).join('')}
+          <option value="all"${gamesPageSize === 'all' ? ' selected' : ''}>All (${refs.length})</option>
+        </select>
+      </label>
+      <button class="btn btn-ghost btn-sm games-prev" ${gamesPage === 0 ? 'disabled' : ''}>◀ Prev</button>
+      <span class="hint">Page ${gamesPage + 1} of ${totalPages} · ${refs.length} game${refs.length === 1 ? '' : 's'}</span>
+      <button class="btn btn-ghost btn-sm games-next" ${gamesPage >= totalPages - 1 ? 'disabled' : ''}>Next ▶</button>
+    </div>`;
+
   gamesHereEl.innerHTML =
-    `<table><thead><tr><th>Opponent</th><th>Result</th><th>Date</th><th>Link</th><th></th></tr></thead><tbody>${rows}</tbody></table>${more}`;
+    `${pagination}<table><thead><tr><th>Opponent</th><th>Result</th><th>Date</th><th>Link</th><th></th></tr></thead><tbody>${rows}</tbody></table>${pagination}`;
+
   gamesHereEl.querySelectorAll<HTMLButtonElement>('.moves-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
       const row = document.getElementById(`moves-row-${btn.dataset.idx}`) as HTMLElement;
       row.hidden = !row.hidden;
     });
+  });
+  gamesHereEl.querySelectorAll<HTMLSelectElement>('.games-page-size').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      gamesPageSize = sel.value === 'all' ? 'all' : parseInt(sel.value, 10);
+      gamesPage = 0;
+      renderGamesHere(node);
+    });
+  });
+  gamesHereEl.querySelectorAll<HTMLButtonElement>('.games-prev').forEach((btn) => {
+    btn.addEventListener('click', () => { gamesPage = Math.max(0, gamesPage - 1); renderGamesHere(node); });
+  });
+  gamesHereEl.querySelectorAll<HTMLButtonElement>('.games-next').forEach((btn) => {
+    btn.addEventListener('click', () => { gamesPage = Math.min(totalPages - 1, gamesPage + 1); renderGamesHere(node); });
   });
 }
 
