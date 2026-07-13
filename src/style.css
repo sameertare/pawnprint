@@ -425,6 +425,10 @@ a { color: var(--blue); }
 .diagram-line { fill: none; stroke: var(--accent); stroke-width: 2; }
 .diagram-label { fill: var(--text-dim); font-size: 14px; font-weight: 600; }
 .diagram-text { fill: var(--text); font-size: 13px; text-anchor: middle; dominant-baseline: middle; }
+.diagram-line.warn { stroke: var(--gold); }
+.diagram-label.warn { fill: var(--gold); }
+.diagram-text.warn { fill: var(--gold); }
+.diagram-arrowhead.warn { fill: var(--gold); }
 .swiss-diagram .hint { margin: 8px 0 0; }
 .swiss-guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .swiss-guide-grid section, .swiss-limit { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; background: var(--bg-card); }
@@ -466,9 +470,7 @@ a { color: var(--blue); }
 .pairing-diagram { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .pairing-diagram .score-group-row { margin-top: 0; }
 .pairing-diagram .color-flow { margin-top: 10px; }
-.pairing-flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.pairing-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--bg-inset); border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; font-size: 0.8rem; color: var(--text-dim); }
-.pairing-badge.warn { border-color: var(--gold); color: var(--text); }
+.pairing-diagram-svg { width: 100%; max-width: 640px; height: auto; display: block; }
 
 #bye-request-details summary { cursor: pointer; list-style: none; }
 #bye-request-details summary::-webkit-details-marker { display: none; }

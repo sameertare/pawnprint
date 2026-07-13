@@ -505,14 +505,41 @@ function pairingDiagramHtml(t: Tournament, roundNo: number, board: number): stri
   const b = d.black!;
   const wFloated = d.floatedId === w.id;
   const bFloated = d.floatedId === b.id;
-  const floatArrow = (score: number) => `<span class="float-arrow" title="Floated down from the ${score} pt group to complete an odd bracket">⇣</span> `;
-  const scoreRow = `<div class="score-group-row">
-      <div class="score-group-label">Score groups</div>
-      <div class="score-group-players">
-        <span class="player-chip${wFloated ? ' floated' : ''}">${wFloated ? floatArrow(w.score) : ''}♔ ${esc(w.name)} · ${w.score} pt${w.score === 1 ? '' : 's'}</span>
-        <span class="player-chip${bFloated ? ' floated' : ''}">${bFloated ? floatArrow(b.score) : ''}♚ ${esc(b.name)} · ${b.score} pt${b.score === 1 ? '' : 's'}</span>
-      </div>
-    </div>`;
+  const svgId = `pd-${roundNo}-${board}`;
+  const warn = d.familyLabel != null;
+
+  // Board-vs-board SVG: a box per player (name, score, assigned color), a connecting line
+  // labeled with the board number and rematch/family status, and a float arrow above whichever
+  // player dropped down a score group to reach this pairing — same visual language as the
+  // static "How pairing logic works" guide's score-group diagram, but for this exact board.
+  const boxW = 210;
+  const boxH = 54;
+  const leftX = 10;
+  const rightX = 420;
+  const boxY = 54;
+  const midX = (leftX + boxW + rightX) / 2;
+  const floatMark = (x: number, score: number) => `
+    <path d="M ${x} 6 L ${x} ${boxY - 2}" class="diagram-line warn" marker-end="url(#${svgId}-arrow)" />
+    <text x="${x}" y="18" class="diagram-label warn" text-anchor="middle">⇣ floated from ${score} pt${score === 1 ? '' : 's'}</text>`;
+  const playerBox = (x: number, glyph: string, name: string, score: number) => `
+    <rect x="${x}" y="${boxY}" width="${boxW}" height="${boxH}" rx="8" class="diagram-box" />
+    <text x="${x + boxW / 2}" y="${boxY + 22}" class="diagram-text" font-weight="700">${glyph} ${esc(name)}</text>
+    <text x="${x + boxW / 2}" y="${boxY + 40}" class="diagram-text" font-size="11">${score} pt${score === 1 ? '' : 's'} entering the round</text>`;
+  const svg = `<svg viewBox="0 0 640 158" class="pairing-diagram-svg" role="img" aria-label="Diagram of board ${board}: ${esc(w.name)} as White versus ${esc(b.name)} as Black">
+    <defs>
+      <marker id="${svgId}-arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" class="diagram-arrowhead warn" />
+      </marker>
+    </defs>
+    ${wFloated ? floatMark(leftX + boxW / 2, w.score) : ''}
+    ${bFloated ? floatMark(rightX + boxW / 2, b.score) : ''}
+    ${playerBox(leftX, '♔', w.name, w.score)}
+    ${playerBox(rightX, '♚', b.name, b.score)}
+    <path d="M ${leftX + boxW} ${boxY + boxH / 2} H ${rightX}" class="diagram-line${warn ? ' warn' : ''}"${d.rematchRound ? ' stroke-dasharray="5 4"' : ''} />
+    <text x="${midX}" y="${boxY + boxH / 2 - 8}" class="diagram-label" text-anchor="middle">Board ${board}</text>
+    <text x="${midX}" y="${boxY + boxH / 2 + 20}" class="diagram-text" font-size="11"${warn ? ' fill="var(--gold)"' : ''} text-anchor="middle">${d.rematchRound ? `🔁 rematch — also Round ${d.rematchRound}` : '🆕 first meeting'}</text>
+    ${d.familyLabel ? `<text x="${midX}" y="${boxY + boxH + 22}" class="diagram-text warn" text-anchor="middle">⚠ family group "${esc(d.familyLabel)}" — paired anyway, no conflict-free option existed</text>` : ''}
+  </svg>`;
 
   const dueLabel = (p: { due: { code: string; why: string } | null }) => (p.due ? `${p.due.code} — ${p.due.why}` : 'no color due yet');
   const gotLabel = (p: { preferenceMet: boolean | null }, color: 'White' | 'Black') =>
@@ -522,20 +549,10 @@ function pairingDiagramHtml(t: Tournament, roundNo: number, board: number): stri
       <span>${esc(b.name)}: ${esc(dueLabel(b))}</span><b>→</b><span>${esc(gotLabel(b, 'Black'))}</span>
     </div>`;
 
-  const badges = [
-    d.rematchRound
-      ? `<span class="pairing-badge warn">🔁 Rematch — also played Round ${d.rematchRound}, paired again only because no rematch-free option existed</span>`
-      : `<span class="pairing-badge">🆕 First meeting between these two</span>`,
-  ];
-  if (d.familyLabel) {
-    badges.push(`<span class="pairing-badge warn">⚠ Family group "${esc(d.familyLabel)}" — paired anyway, no conflict-free option existed</span>`);
-  }
-
   return `<div class="pairing-diagram">
-    ${scoreRow}
+    ${svg}
     ${colorFlow}
     <p class="hint" style="margin:6px 0 0;">${esc(d.colorReason ?? '')}</p>
-    <div class="pairing-flags">${badges.join('')}</div>
   </div>`;
 }
 
