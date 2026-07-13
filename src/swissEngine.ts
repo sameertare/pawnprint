@@ -107,7 +107,8 @@ function parseNwchessRoster(text: string): RosterEntry[] {
     const rating = rated.length ? Math.max(...rated) : null;
     const name = `${first} ${last}`.replace(/\s{2,}/g, ' ').trim();
     if (!name) continue;
-    const key = name.toLowerCase();
+    // Only dedupe an exact name+rating repeat — see parsePlainList for why name alone isn't enough.
+    const key = `${name.toLowerCase()} ${rating ?? ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const byeRounds = parseByeRounds(c[14]); // "Byes" column, e.g. "4,5"
@@ -173,7 +174,10 @@ function parseHeaderTable(text: string): RosterEntry[] | null {
         const name = (f[nameIdx] ?? '').replace(/\s{2,}/g, ' ').trim();
         if (!name || name.toLowerCase() === 'name') continue;
         const rating = ratingOrNull(f[ratingIdx]);
-        const key = name.toLowerCase();
+        // Only dedupe an exact name+rating repeat (e.g. the same row pasted twice) — two real
+        // players can legitimately share a name, and silently dropping one is worse than
+        // occasionally letting a true accidental duplicate through.
+        const key = `${name.toLowerCase()} ${rating ?? ''}`;
         if (seen.has(key)) continue;
         seen.add(key);
         const byeRounds = byeIdx !== -1 ? parseByeRounds(f[byeIdx]) : [];
@@ -190,8 +194,8 @@ function parseHeaderTable(text: string): RosterEntry[] | null {
   for (const line of lines) {
     const row = parseWallchartLine(line);
     if (!row) continue;
-    const key = row.name.toLowerCase();
-    if (key === 'name' || seen.has(key)) continue;
+    const key = `${row.name.toLowerCase()} ${row.rating ?? ''}`;
+    if (row.name.toLowerCase() === 'name' || seen.has(key)) continue;
     seen.add(key);
     out.push({ name: row.name, rating: row.rating, ...(row.byeRounds.length ? { byeRounds: row.byeRounds } : {}) });
   }
