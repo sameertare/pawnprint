@@ -202,7 +202,13 @@ function parseHeaderTable(text: string): RosterEntry[] | null {
 function parsePlainList(text: string): RosterEntry[] {
   const out: RosterEntry[] = [];
   const seen = new Set<string>();
-  for (let raw of text.replace(/\r/g, '').split('\n')) {
+  // Guard against two entries ending up on one line — e.g. a newline lost while typing a new
+  // player onto the end of the roster, or pasting text that collapsed line breaks. A numbered
+  // marker ("12. " / "12) ") appearing mid-line, not just at the very start, is a strong signal
+  // that a second entry is glued onto the first — split it back into its own line so it doesn't
+  // silently get swallowed into the previous player's name/rating.
+  const normalized = text.replace(/([^\n])\s+(\d{1,3}[.)]\s)/g, '$1\n$2');
+  for (let raw of normalized.replace(/\r/g, '').split('\n')) {
     let line = raw.trim();
     if (!line) continue;
     if ((/^(name|player|rank)\b/i.test(line) || /^#/.test(line)) && /rating|elo|\bid\b/i.test(line)) continue; // header row
