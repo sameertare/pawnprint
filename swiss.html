@@ -45,8 +45,12 @@
               <option value="nwchess">NWChess RosterTable.csv</option>
             </select>
           </label>
+          <label class="stack">Number of rounds
+            <input type="number" id="rounds-input" class="text-input" min="1" max="30" placeholder="auto" style="width:90px;" />
+          </label>
         </div>
         <p class="hint" id="format-hint"></p>
+        <p class="hint" id="rounds-hint"></p>
         <label class="stack">Paste players (one per line — <code>Name</code>, <code>Name Rating</code>, or <code>Name, Rating</code>) — or upload an <b>NWChess RosterTable.csv</b>
           <textarea id="roster-text" class="text-area" rows="8" placeholder="1. Magnus Carlsen, 2839
 Hikaru Nakamura 2794

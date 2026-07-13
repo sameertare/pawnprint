@@ -37,6 +37,7 @@ export interface Tournament {
   players: Player[];
   rounds: Round[];
   createdAt: string;
+  totalRounds: number; // TD-chosen (or auto-recommended) round count for this event
 }
 
 // ---------------- roster parsing ----------------
@@ -263,7 +264,7 @@ export function parseRoster(text: string, format: RosterFormat = 'auto'): Roster
   }
 }
 
-export function createTournament(name: string, roster: RosterEntry[]): Tournament {
+export function createTournament(name: string, roster: RosterEntry[], totalRounds?: number): Tournament {
   return {
     name: name || 'Swiss Tournament',
     createdAt: new Date().toISOString(),
@@ -280,6 +281,7 @@ export function createTournament(name: string, roster: RosterEntry[]): Tournamen
       withdrawn: false,
     })),
     rounds: [],
+    totalRounds: totalRounds && totalRounds > 0 ? totalRounds : recommendedRounds(roster.length),
   };
 }
 

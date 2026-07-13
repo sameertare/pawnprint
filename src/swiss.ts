@@ -192,6 +192,7 @@ function previewRoster() {
   const prev = $('#roster-preview');
   if (!all.length) {
     ($('#section-row') as HTMLElement).hidden = true;
+    $('#rounds-hint').textContent = '';
     prev.innerHTML = text.trim()
       ? `<p class="neg">No players parsed as <b>${esc(($('#format-select') as HTMLSelectElement).selectedOptions[0].text)}</b>. Check that the roster matches the selected format.</p>`
       : '';
@@ -200,6 +201,8 @@ function previewRoster() {
   const secs = syncSectionUI(all);
   const roster = previewSelection(all);
   const rr = recommendedRounds(roster.length);
+  ($('#rounds-input') as HTMLInputElement).placeholder = String(rr);
+  $('#rounds-hint').textContent = `Leave blank to use the recommended ${rr} rounds for ${roster.length} players, or set your own.`;
   const note = fmt === 'nwchess'
     ? `<p class="hint">📋 NWChess format — FIDE ratings ignored, seeding by <b>max(NWSRS, USCF)</b>; withdrawn players excluded.` +
       (secs.length > 1 ? ` Creating sets up all <b>${secs.length}</b> sections; “Pair next round” pairs them together.` : '') + `</p>`
@@ -259,7 +262,9 @@ $('#parse-btn').addEventListener('click', () => {
   const usable = groups.filter((g) => g.roster.length >= 2);
   const skipped = groups.filter((g) => g.roster.length < 2);
   if (!usable.length) { $('#roster-preview').innerHTML = `<p class="neg">Each section needs at least 2 players.</p>`; return; }
-  ev = { name: eventName, sections: usable.map((g) => createTournament(g.name, g.roster)), active: 0 };
+  const roundsRaw = ($('#rounds-input') as HTMLInputElement).value.trim();
+  const roundsOverride = roundsRaw ? Math.max(1, Math.min(30, parseInt(roundsRaw, 10))) : undefined;
+  ev = { name: eventName, sections: usable.map((g) => createTournament(g.name, g.roster, roundsOverride)), active: 0 };
   save();
   renderAll();
   if (skipped.length) {
@@ -276,6 +281,11 @@ $('#pair-btn').addEventListener('click', () => {
   });
   if (anyIncomplete &&
       !confirm('Some sections have unfinished games in the current round. Pair the next round for ALL sections anyway? Unentered games count as not yet played.')) {
+    return;
+  }
+  const anyAtLimit = ev.sections.some((s) => s.rounds.length >= (s.totalRounds ?? Infinity));
+  if (anyAtLimit &&
+      !confirm(`This event was set up for ${ev.sections[0].totalRounds} round(s), which have already been paired. Pair an extra round anyway?`)) {
     return;
   }
   for (const s of ev.sections) {
@@ -363,7 +373,7 @@ function renderAll() {
   if (!ev || !t) return;
 
   renderSectionTabs();
-  const rr = recommendedRounds(t.players.length);
+  const rr = t.totalRounds ?? recommendedRounds(t.players.length);
   const roundsPlayed = t.rounds.length;
   const evLabel = ev.sections.length > 1
     ? `<b>${esc(ev.name)}</b> · ${ev.sections.length} sections · round ${roundsPlayed} · viewing <b>${esc(t.name)}</b> (${t.players.length} players, ${roundsPlayed}/${rr} rounds)`
