@@ -493,11 +493,23 @@ function pairingDiagramHtml(t: Tournament, roundNo: number, board: number): stri
 
   if (d.kind === 'bye') {
     const bye = d.bye!;
+    const candidatesHtml = bye.candidates?.length
+      ? `<div class="bracket-panel">
+          <div class="bracket-panel-label">Bye order — fewest prior byes, then lowest score, then lowest rating</div>
+          <div class="bracket-half">${bye.candidates
+            .map(
+              (c) =>
+                `<span class="player-chip rank-tag${c.id === bye.chosenId ? ' paired-white' : ''}">${esc(c.name)} · ${c.byes} bye${c.byes === 1 ? '' : 's'} · ${c.score} pt${c.score === 1 ? '' : 's'}${c.rating != null ? ` · ${c.rating}` : ''}</span>`
+            )
+            .join('')}</div>
+        </div>`
+      : '';
     return `<div class="pairing-diagram">
       <div class="score-group-row">
         <div class="score-group-label">${bye.score} pt${bye.score === 1 ? '' : 's'}</div>
         <div class="score-group-players"><span class="player-chip">${esc(bye.name)} <span class="hint">(${bye.requested ? '+½ requested bye' : '+1 field-odd bye'})</span></span></div>
       </div>
+      ${candidatesHtml}
     </div>`;
   }
 
@@ -549,10 +561,31 @@ function pairingDiagramHtml(t: Tournament, roundNo: number, board: number): stri
       <span>${esc(b.name)}: ${esc(dueLabel(b))}</span><b>→</b><span>${esc(gotLabel(b, 'Black'))}</span>
     </div>`;
 
+  let bracketHtml = '';
+  if (d.bracket && d.bracket.length > 2) {
+    const chip = (m: NonNullable<typeof d.bracket>[number]) => {
+      const paired = m.id === w.id ? ' paired-white' : m.id === b.id ? ' paired-black' : '';
+      const floatTag = m.floatedIn ? '<span class="float-arrow" title="Floated down to complete this bracket">⇣</span> ' : '';
+      return `<span class="player-chip rank-tag${paired}">${floatTag}#${m.rank} ${esc(m.name)}${m.rating != null ? ` (${m.rating})` : ''}</span>`;
+    };
+    const half = Math.ceil(d.bracket.length / 2);
+    const top = d.bracket.slice(0, half).map(chip).join('');
+    const bottom = d.bracket.slice(half).map(chip).join('');
+    bracketHtml = `<div class="bracket-panel">
+      <div class="bracket-panel-label">Score bracket — ${d.bracketScore} pt${d.bracketScore === 1 ? '' : 's'} (${d.bracket.length} players), ranked by rating — natural pairing crosses top half vs bottom half</div>
+      <div class="bracket-half-row">
+        <div class="bracket-half">${top}</div>
+        <span class="bracket-divider">⇄</span>
+        <div class="bracket-half">${bottom}</div>
+      </div>
+    </div>`;
+  }
+
   return `<div class="pairing-diagram">
     ${svg}
     ${colorFlow}
     <p class="hint" style="margin:6px 0 0;">${esc(d.colorReason ?? '')}</p>
+    ${bracketHtml}
   </div>`;
 }
 

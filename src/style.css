@@ -472,6 +472,15 @@ a { color: var(--blue); }
 .pairing-diagram .color-flow { margin-top: 10px; }
 .pairing-diagram-svg { width: 100%; max-width: 640px; height: auto; display: block; }
 
+.bracket-panel { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.bracket-panel-label { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 6px; }
+.bracket-half-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bracket-half { display: flex; flex-wrap: wrap; gap: 6px; }
+.bracket-divider { color: var(--text-dim); font-size: 0.9rem; flex-shrink: 0; }
+.player-chip.rank-tag { font-variant-numeric: tabular-nums; }
+.player-chip.paired-white { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+.player-chip.paired-black { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+
 #bye-request-details summary { cursor: pointer; list-style: none; }
 #bye-request-details summary::-webkit-details-marker { display: none; }
 #bye-request-details summary h2 { display: inline-flex; align-items: center; gap: 8px; }

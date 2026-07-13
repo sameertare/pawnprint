@@ -466,6 +466,20 @@ function scoreBeforeRound(t: Tournament, playerId: number, roundNo: number): num
   return Math.round(score * 10) / 10;
 }
 
+/** Forced (unpaired) full-point byes received before `roundNo` — the same count pairNextRound's
+ *  bye-recipient tiebreak reads live off the player object, reconstructed from round history so
+ *  it also works for explaining a past round. */
+function byesBeforeRound(t: Tournament, playerId: number, roundNo: number): number {
+  let byes = 0;
+  for (let r = 1; r < roundNo; r++) {
+    const round = t.rounds[r - 1];
+    if (!round) break;
+    const pr = round.pairings.find((p) => p.byeId === playerId);
+    if (pr && (pr.byePoints ?? 1) === 1) byes++;
+  }
+  return byes;
+}
+
 /** Colors actually played in real games before `roundNo`, read from the round pairings directly
  *  rather than trusting player.colors (which byes don't push to, so it can drift out of
  *  round-index alignment for a player who's had one). */
@@ -494,9 +508,13 @@ function priorMeetingRound(t: Tournament, aId: number, bId: number, beforeRound:
 
 export type ColorDue = { code: 'W' | 'WW' | 'B' | 'BB'; color: Color; why: string };
 
+export interface BracketMember { id: number; name: string; rating: number | null; rank: number; half: 'top' | 'bottom'; floatedIn: boolean }
+
+export interface ByeCandidate { id: number; name: string; byes: number; score: number; rating: number | null }
+
 export interface PairingDetail {
   kind: 'bye' | 'game';
-  bye?: { name: string; score: number; requested: boolean };
+  bye?: { name: string; score: number; requested: boolean; candidates?: ByeCandidate[]; chosenId?: number };
   white?: { id: number; name: string; score: number; historyText: string; due: ColorDue | null; preferenceMet: boolean | null };
   black?: { id: number; name: string; score: number; historyText: string; due: ColorDue | null; preferenceMet: boolean | null };
   sameScoreGroup?: boolean;
@@ -504,6 +522,8 @@ export interface PairingDetail {
   colorReason?: string;
   rematchRound?: number | null;
   familyLabel?: string | null;
+  bracket?: BracketMember[]; // the score bracket this pairing was drawn from, ranked by seed
+  bracketScore?: number;
 }
 
 function colorDue(h: Color[]): ColorDue | null {
@@ -538,7 +558,19 @@ export function explainPairingDetail(t: Tournament, roundNo: number, board: numb
     if (!p) return null;
     const score = scoreBeforeRound(t, p.id, roundNo);
     const requested = (pr.byePoints ?? 1) === 0.5;
-    return { kind: 'bye', bye: { name: p.name, score, requested } };
+    let candidates: ByeCandidate[] | undefined;
+    if (!requested) {
+      // Every player who took the field for this round (played or requested a bye) was a
+      // candidate for the forced full-point bye; the engine picks fewest-byes-so-far, then
+      // lowest score, then lowest rating. Reconstructed the same way for display.
+      const inRound = new Set(round.pairings.flatMap((rp) => [rp.whiteId, rp.blackId, rp.byeId]).filter((id): id is number => id != null));
+      candidates = [...inRound]
+        .map((id) => byId.get(id)!)
+        .filter(Boolean)
+        .map((pl) => ({ id: pl.id, name: pl.name, byes: byesBeforeRound(t, pl.id, roundNo), score: scoreBeforeRound(t, pl.id, roundNo), rating: pl.rating }))
+        .sort((x, y) => x.byes - y.byes || x.score - y.score || (x.rating ?? 0) - (y.rating ?? 0));
+    }
+    return { kind: 'bye', bye: { name: p.name, score, requested, candidates, chosenId: p.id } };
   }
 
   const w = byId.get(pr.whiteId!);
@@ -560,12 +592,42 @@ export function explainPairingDetail(t: Tournament, roundNo: number, board: numb
     ? t.familyGroups.find((g) => g.playerIds.includes(w.id) && g.playerIds.includes(b.id))
     : null;
 
+  // Reconstruct the score bracket this pairing was drawn from: every player who played a real
+  // game this round at the lower of the two scores (the bracket both settled into), plus the
+  // floater if one of them dropped in from a higher bracket — ranked by rating like the fold
+  // algorithm ranks a bracket before splitting it into a top half and bottom half. This shows
+  // who else was in the pool, not a re-simulation of the algorithm's rematch/family backtracking
+  // (which can occasionally cross bracket boundaries via its whole-field fallback).
+  const floatedId = wScore === bScore ? null : wScore > bScore ? w.id : b.id;
+  const bracketScore = Math.min(wScore, bScore);
+  const gamePlayers = round.pairings
+    .filter((rp) => rp.byeId == null)
+    .flatMap((rp) => [rp.whiteId!, rp.blackId!])
+    .map((id) => byId.get(id)!)
+    .filter(Boolean);
+  const bracketPool = gamePlayers.filter((pl) => scoreBeforeRound(t, pl.id, roundNo) === bracketScore);
+  if (floatedId != null && !bracketPool.some((pl) => pl.id === floatedId)) {
+    bracketPool.push(byId.get(floatedId)!);
+  }
+  const rankedBracket = [...bracketPool].sort((x, y) => (y.rating ?? 0) - (x.rating ?? 0) || x.id - y.id);
+  const half = Math.ceil(rankedBracket.length / 2);
+  const bracket: BracketMember[] = rankedBracket.map((pl, i) => ({
+    id: pl.id,
+    name: pl.name,
+    rating: pl.rating,
+    rank: i + 1,
+    half: i < half ? 'top' : 'bottom',
+    floatedIn: pl.id === floatedId,
+  }));
+
   return {
     kind: 'game',
     white: { id: w.id, name: w.name, score: wScore, historyText: summarize(wHist), due: wDue, preferenceMet: met(wDue, 'w') },
     black: { id: b.id, name: b.name, score: bScore, historyText: summarize(bHist), due: bDue, preferenceMet: met(bDue, 'b') },
     sameScoreGroup: wScore === bScore,
-    floatedId: wScore === bScore ? null : wScore > bScore ? w.id : b.id,
+    floatedId,
+    bracket,
+    bracketScore,
     colorReason,
     rematchRound: priorRound,
     familyLabel: familyGroup ? (familyGroup.label ?? 'a family group') : null,
@@ -582,12 +644,19 @@ export function explainPairing(t: Tournament, roundNo: number, board: number): s
 
   if (d.kind === 'bye') {
     const bye = d.bye!;
-    return [
-      bye.requested
-        ? `${bye.name} requested to sit out Round ${roundNo} and received a half-point bye.`
-        : `${bye.name} received the round's bye — the lowest-standing player (by score, then rating) who hadn't already had one, needed because the field was odd.`,
-      `Entered the round with ${bye.score} point(s).`,
-    ];
+    if (bye.requested) {
+      return [`${bye.name} requested to sit out Round ${roundNo} and received a half-point bye.`, `Entered the round with ${bye.score} point(s).`];
+    }
+    const lines = [`${bye.name} received the round's bye, needed because the field was odd.`, `Entered the round with ${bye.score} point(s).`];
+    if (bye.candidates?.length) {
+      lines.push(
+        `Bye order (fewest prior byes, then lowest score, then lowest rating) — ${bye.candidates
+          .slice(0, 5)
+          .map((c) => `${c.name}: ${c.byes} bye(s), ${c.score} pt(s)${c.rating != null ? `, ${c.rating}` : ''}`)
+          .join('; ')}${bye.candidates.length > 5 ? '; …' : ''}.`
+      );
+    }
+    return lines;
   }
 
   const { white: w, black: b } = d;
@@ -596,11 +665,20 @@ export function explainPairing(t: Tournament, roundNo: number, board: number): s
     d.sameScoreGroup
       ? `Both entered Round ${roundNo} with ${w!.score} point(s) — paired within the same score group.`
       : `${d.floatedId === w!.id ? w!.name : b!.name} entered with ${Math.max(w!.score, b!.score)} point(s) and floated down to pair against ${d.floatedId === w!.id ? b!.name : w!.name} (${Math.min(w!.score, b!.score)} point(s)), needed to complete an odd bracket.`,
+  ];
+  if (d.bracket && d.bracket.length > 2) {
+    const wRank = d.bracket.find((m) => m.id === w!.id);
+    const bRank = d.bracket.find((m) => m.id === b!.id);
+    lines.push(
+      `Score bracket (${d.bracketScore} pt(s), ${d.bracket.length} players, ranked by rating) — ${w!.name} is seed #${wRank?.rank} (${wRank?.half} half), ${b!.name} is seed #${bRank?.rank} (${bRank?.half} half).`
+    );
+  }
+  lines.push(
     `Color history before this round — ${w!.name}: ${w!.historyText}. ${b!.name}: ${b!.historyText}.`,
     `Color due before assignment — ${dueText(w!, w!.due)}. ${dueText(b!, b!.due)}.`,
     `Color decision — ${d.colorReason}.`,
-    d.rematchRound ? `Rematch — they also played in Round ${d.rematchRound}. Paired again only because no rematch-free pairing was available.` : 'First meeting between these two players.',
-  ];
+    d.rematchRound ? `Rematch — they also played in Round ${d.rematchRound}. Paired again only because no rematch-free pairing was available.` : 'First meeting between these two players.'
+  );
   if (d.familyLabel) {
     lines.push(`${w!.name} and ${b!.name} are marked as "${d.familyLabel}" — paired anyway because no conflict-free pairing was available this round.`);
   }
