@@ -167,7 +167,7 @@ Two modes, one board (Stockfish 18 runs locally in the browser):
 - The **opening name** (book lookup, no PGN headers needed) is shown once the moves played match a known line, and keeps updating as you navigate.
 
 **Live lichess game / study / position**
-- Paste a lichess **game** URL or 8-character ID and **Connect** — the board follows the game move-by-move in real time (feedback begins from the position at the moment you connect; the stream doesn't replay earlier moves).
+- Paste a lichess **game** URL or 8-character ID and **Connect** — loads the full game so far (so you can step through everything already played) and then follows new moves live. The live move stream and the game-history backfill start at the same time rather than one waiting on the other, so a move played while the history is still loading isn't missed.
 - Paste a lichess **study** link (with or without a chapter) to load that chapter as a static, navigable game — click pieces or step with ◀ ▶, same as Any Position. A study with multiple chapters loads chapter 1, with a note to paste a direct chapter link for another.
 - Paste a lichess **analysis-board** link (with an embedded FEN) or just a bare **FEN** to load that single position.
 - Every move gets **feedback** — Best / OK / Inaccuracy ?! / Mistake ? / Blunder ?? — based on the win-probability swing, with the engine's better move shown when relevant. The **● LIVE** badge (and jump-back-to-live button) only appears for an actual live game, not a study/position load.

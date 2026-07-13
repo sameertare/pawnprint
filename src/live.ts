@@ -606,29 +606,40 @@ async function connectLive(id: string) {
   status.innerHTML = `Loading game <code>${id}</code>…`;
   render();
 
-  // 1) Fetch the full game so far (finished or in-progress) so the whole game is navigable.
+  // 1) Open the live move stream immediately — this used to run after the full-history fetch
+  // below, so any moves played while that fetch was in flight were missed until the next one
+  // arrived (the visible "2-3 moves behind" lag). Starting it first means the stream itself
+  // starts capturing deltas (via the rebase-on-first-message path in appendFromStream) from the
+  // moment we connect, independent of how long the history backfill takes.
+  const streamPromise = streamLichessGame(id, signal, status);
+
+  // 2) Backfill full game history in parallel so earlier moves are still navigable. Only adopt
+  // it if it isn't already behind what the live stream has produced in the meantime — an export
+  // fetched concurrently with a fast-moving stream can otherwise reflect an earlier position and
+  // regress the board.
   try {
     const r = await fetch(`https://lichess.org/game/export/${id}?clocks=false&evals=false&literate=false`, {
       headers: { Accept: 'application/x-chess-pgn' }, signal,
     });
     if (r.ok) {
       const built = buildLineFromPgn(await r.text());
-      if (built && built.line.length > 1) {
+      if (built && built.line.length > 1 && built.line.length >= line.length) {
         line = built.line;
         evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
-        pgnLoaded = true;
         view = line.length - 1;
+        status.innerHTML = `Loaded ${line.length - 1} moves. Following live — step back any time with ◀ ▶.`;
+      }
+      if (built) {
+        pgnLoaded = true;
         setPlayers(built.white, built.black, built.wr, built.br);
         curEvent = built.event; curResult = built.result;
-        status.innerHTML = `Loaded ${line.length - 1} moves. Following live — step back any time with ◀ ▶.`;
       }
     }
   } catch { if (signal.aborted) return; }
   render();
   void pump();
 
-  // 2) Follow ongoing moves.
-  void streamLichessGame(id, signal, status);
+  void streamPromise;
 }
 
 /** Load a lichess study chapter (or the first chapter of a whole study) as a static, navigable game. */
