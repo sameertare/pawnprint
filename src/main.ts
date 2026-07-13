@@ -324,17 +324,17 @@ function assessmentHtml(g: GameRecord, openingsByFamily?: Map<string, OpeningRow
   const phaseRows = a.phases
     .map(
       (p) =>
-        `<li><span class="${verdictCls(p.verdict)}">${verdictIcon(p.verdict)} ${p.phase[0].toUpperCase() + p.phase.slice(1)}</span> — ${esc(p.summary)}</li>`
+        `<li><span class="${verdictCls(p.verdict)}">${verdictIcon(p.verdict)} ${p.phase[0].toUpperCase() + p.phase.slice(1)}</span> — ${mdBold(esc(p.summary))}</li>`
     )
     .join('');
   const strengthsHtml = a.strengths.length
-    ? `<p><b>Strengths</b></p><ul class="pattern-list">${a.strengths.map((s) => `<li><span class="pos">✓</span> ${esc(s)}</li>`).join('')}</ul>`
+    ? `<p><b>Strengths</b></p><ul class="pattern-list">${a.strengths.map((s) => `<li><span class="pos">✓</span> ${mdBold(esc(s))}</li>`).join('')}</ul>`
     : '';
   const weaknessesHtml = a.weaknesses.length
-    ? `<p><b>Weaknesses</b></p><ul class="pattern-list">${a.weaknesses.map((s) => `<li><span class="neg">✗</span> ${esc(s)}</li>`).join('')}</ul>`
+    ? `<p><b>Weaknesses</b></p><ul class="pattern-list">${a.weaknesses.map((s) => `<li><span class="neg">✗</span> ${mdBold(esc(s))}</li>`).join('')}</ul>`
     : '';
   return `
-    <p><b>Overall:</b> ${esc(a.overall)}</p>
+    <p><b>Overall:</b> ${mdBold(esc(a.overall))}</p>
     <p><b>By phase</b></p>
     <ul class="pattern-list">${phaseRows}</ul>
     ${strengthsHtml}

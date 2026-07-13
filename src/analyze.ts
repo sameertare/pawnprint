@@ -274,6 +274,14 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
   }
 
   worstMoves.sort((a, b) => (b.winPctBefore - b.winPctAfter) - (a.winPctBefore - a.winPctAfter));
+  // Keep the top 3 swings globally, plus each phase's single worst move if it didn't already make
+  // that cut — so a per-game assessment can always cite a specific move for a flagged phase, not
+  // just the phases responsible for the very biggest swings in the game.
+  const keptMoves = worstMoves.slice(0, 3);
+  for (const phaseKey of ['opening', 'middlegame', 'endgame'] as Phase[]) {
+    const worstInPhase = worstMoves.find((m) => m.phase === phaseKey);
+    if (worstInPhase && !keptMoves.includes(worstInPhase)) keptMoves.push(worstInPhase);
+  }
 
   const accOf = (p: Phase) => (accSums[p].n > 0 ? accSums[p].sum / accSums[p].n : null);
   const allN = accSums.opening.n + accSums.middlegame.n + accSums.endgame.n;
@@ -326,7 +334,7 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
     timePressureBlunders,
     clockSeries,
     errorSeries,
-    worstMoves: worstMoves.slice(0, 3),
+    worstMoves: keptMoves,
     evalGraph: analyzed ? evals.map((v) => Math.max(-1000, Math.min(1000, v ?? 0))) : null,
     sans,
   };
