@@ -414,6 +414,28 @@ a { color: var(--blue); }
 .explain-row td { background: var(--bg-inset); padding-top: 4px; padding-bottom: 4px; }
 .explain-row .pattern-list { margin: 0; padding-left: 18px; font-size: 0.86rem; color: var(--text-dim); }
 .explain-row .pattern-list li { margin-bottom: 4px; }
+.swiss-guide { margin-top: 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-inset); }
+.swiss-guide > summary { cursor: pointer; padding: 10px 13px; color: var(--text); font-weight: 600; }
+.swiss-guide > summary:hover { color: var(--accent); }
+.swiss-guide-content { padding: 0 14px 16px; }
+.swiss-guide-content > p:first-child { margin-top: 0; }
+.swiss-diagram { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 14px 0; background: var(--bg-card); }
+.swiss-diagram svg { width: 100%; height: auto; display: block; }
+.diagram-box { fill: rgba(108, 167, 224, 0.15); stroke: var(--blue); stroke-width: 1.5; }
+.diagram-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.diagram-label { fill: var(--text-dim); font-size: 14px; font-weight: 600; }
+.diagram-text { fill: var(--text); font-size: 13px; text-anchor: middle; dominant-baseline: middle; }
+.swiss-diagram .hint { margin: 8px 0 0; }
+.swiss-guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.swiss-guide-grid section, .swiss-limit { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; background: var(--bg-card); }
+.swiss-guide h3 { margin: 0 0 8px; font-size: .95rem; }
+.swiss-guide ol { margin: 0; padding-left: 20px; font-size: .9rem; }
+.swiss-guide li { margin: 5px 0; }
+.color-flow { display: grid; grid-template-columns: 1fr auto 1.25fr; gap: 7px 9px; align-items: center; font-size: .84rem; }
+.color-flow b { color: var(--accent); font-size: 1.1rem; }
+.color-flow span { padding: 5px 7px; border-radius: 6px; background: var(--bg-inset); }
+.swiss-limit { margin-top: 14px; border-left: 4px solid var(--gold); }
+.swiss-limit p { margin: 0; font-size: .9rem; }
 
 .extra-game-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .extra-game-form .extra-name { min-width: 160px; }
@@ -532,6 +554,9 @@ textarea {
 
 @media (max-width: 640px) {
   .config-row { flex-direction: column; align-items: stretch; }
+  .swiss-guide-grid { grid-template-columns: 1fr; }
+  .color-flow { grid-template-columns: 1fr; }
+  .color-flow b { display: none; }
   table { font-size: 0.8rem; }
   th, td { padding: 5px 6px; }
   .input-tabs { flex-direction: column; }

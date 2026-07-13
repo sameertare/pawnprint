@@ -79,6 +79,55 @@ Ian Nepomniachtchi 2758"></textarea>
           <button id="pair-btn" class="btn btn-primary">➕ Pair next round</button>
           <span id="round-info" class="hint"></span>
         </div>
+        <details class="swiss-guide">
+          <summary>ⓘ How pairing logic works</summary>
+          <div class="swiss-guide-content">
+            <p>This guide explains score groups, natural opponents, floaters, color due, and illegal matchups. Ratings seed players and break ties; current score remains the main pairing priority.</p>
+
+            <div class="swiss-diagram" role="img" aria-label="A score group is split into a top and bottom half, then players are paired across the halves.">
+              <svg viewBox="0 0 620 128" aria-hidden="true" focusable="false">
+                <text x="18" y="23" class="diagram-label">Same score group</text>
+                <rect x="18" y="38" width="94" height="34" rx="8" class="diagram-box"/><text x="65" y="60" class="diagram-text">Seed 1</text>
+                <rect x="18" y="82" width="94" height="34" rx="8" class="diagram-box"/><text x="65" y="104" class="diagram-text">Seed 2</text>
+                <rect x="216" y="38" width="94" height="34" rx="8" class="diagram-box"/><text x="263" y="60" class="diagram-text">Seed 3</text>
+                <rect x="216" y="82" width="94" height="34" rx="8" class="diagram-box"/><text x="263" y="104" class="diagram-text">Seed 4</text>
+                <path d="M112 55 C150 55 176 55 216 55 M112 99 C150 99 176 99 216 99" class="diagram-line"/>
+                <text x="332" y="23" class="diagram-label">Natural pairings</text>
+                <path d="M332 55 H408 M332 99 H408" class="diagram-line"/>
+                <text x="425" y="60" class="diagram-text">1 vs 3</text><text x="425" y="104" class="diagram-text">2 vs 4</text>
+              </svg>
+              <p class="hint">Top-half players sit on the left and bottom-half players on the right. A changed opponent means the engine had to depart from a natural pairing to solve a restriction.</p>
+            </div>
+
+            <div class="swiss-guide-grid">
+              <section>
+                <h3>Pairing order</h3>
+                <ol>
+                  <li><b>Requested byes:</b> players who requested the round sit out first and receive ½ point.</li>
+                  <li><b>Score groups:</b> remaining players are grouped by current score, highest group first.</li>
+                  <li><b>Floaters:</b> an odd score group sends its lowest seed down one score group so everyone can be paired.</li>
+                  <li><b>Illegal matchups:</b> the engine backtracks to avoid a previous opponent. A rematch is used only if no rematch-free arrangement is available.</li>
+                  <li><b>Full bye:</b> if the eligible field is still odd, the player with the fewest prior full byes is preferred; ties go to the lower score, then lower rating.</li>
+                </ol>
+              </section>
+              <section>
+                <h3>Color due (W / WW / B / BB)</h3>
+                <div class="color-flow" role="img" aria-label="Color assignment flow: first avoid three consecutive colors, then correct imbalance, then alternate the last color, then use a deterministic fallback.">
+                  <span>WW or BB: third consecutive color would occur</span><b>→</b><span>Strongest: give the opposite color</span>
+                  <span>W or B: White–Black balance is unequal</span><b>→</b><span>Next: equalize the color count</span>
+                  <span>Balance equal and no severe conflict</span><b>→</b><span>Alternate last color; then use a deterministic fallback</span>
+                </div>
+                <p class="hint">W/B means due White/Black for equalization; WW/BB marks the stronger consecutive-color issue. A balance of −1 means one more Black than White. Byes do not count as a color.</p>
+              </section>
+            </div>
+
+            <section class="swiss-limit">
+              <h3>Family, siblings, teams, and other protected pairings</h3>
+              <p><b>Not currently enforced:</b> this version does not collect relationship, school, club, team, or sibling data, so it cannot automatically prevent those pairings. A tournament director must review the generated boards and use <em>“Fix a mistake in this round”</em> to swap players if an exclusion is needed. The ⓘ note on each board reports only rules that the engine actually used.</p>
+            </section>
+            <p class="hint">Pairings are deterministic for the same roster and entered results. Manual swaps change the displayed pairing but do not add a permanent exclusion rule for later rounds.</p>
+          </div>
+        </details>
         <details class="more-menu">
           <summary>⋯ More options</summary>
           <div class="config-row" style="align-items:center;">
