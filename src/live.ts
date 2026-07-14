@@ -408,17 +408,24 @@ board.onSquareClick = (sq) => {
   else board.setSelected(null);
 };
 
-$('#load-fen').addEventListener('click', () => {
-  const fen = ($('#fen-input') as HTMLInputElement).value.trim();
+/** Loads a FEN into Any Position mode's board — shared by the FEN input's own Load button and
+ *  the "Analyze in Any Position" action from Live mode. Returns whether it was valid. */
+function loadFenIntoPosition(fen: string): boolean {
   try {
     new Chess(fen); // validate
     resetLine(fen);
     $('#engine-out').innerHTML = '';
     render();
     void pump();
+    return true;
   } catch {
     $('#engine-out').innerHTML = `<p class="neg">Invalid FEN.</p>`;
+    return false;
   }
+}
+
+$('#load-fen').addEventListener('click', () => {
+  loadFenIntoPosition(($('#fen-input') as HTMLInputElement).value.trim());
 });
 
 $('#load-pgn').addEventListener('click', () => {
@@ -757,6 +764,45 @@ $('#export-pgn-btn').addEventListener('click', () => {
   });
   const safeName = `${curWhite || 'white'}_vs_${curBlack || 'black'}`.replace(/[^\w.-]/g, '_').slice(0, 60);
   downloadPgn(`${safeName}.pgn`, pgn);
+});
+
+/** Briefly swaps a button's label to confirm a clipboard write succeeded — copying is silent
+ *  otherwise, so without this the button looks like it did nothing. */
+function flashCopied(btn: HTMLButtonElement, label: string) {
+  const original = btn.textContent;
+  btn.textContent = label;
+  setTimeout(() => { btn.textContent = original; }, 1200);
+}
+
+$('#copy-fen-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget as HTMLButtonElement;
+  try {
+    await navigator.clipboard.writeText(line[view].fen);
+    flashCopied(btn, '✓ Copied');
+  } catch {
+    flashCopied(btn, 'Copy failed');
+  }
+});
+
+$('#copy-pgn-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget as HTMLButtonElement;
+  const pgn = buildPgnFromLine({ white: curWhite, black: curBlack, event: curEvent, result: curResult, line, evalsW, bestU });
+  try {
+    await navigator.clipboard.writeText(pgn);
+    flashCopied(btn, '✓ Copied');
+  } catch {
+    flashCopied(btn, 'Copy failed');
+  }
+});
+
+// Sends the exact position currently being viewed in Live mode over to Any Position mode and
+// runs a deep engine search on it — the quickest path to a slower, deeper look at a live-game
+// position than Live mode's own background candidate-move analysis gives you.
+$('#analyze-position-btn').addEventListener('click', () => {
+  const fen = line[view].fen;
+  document.querySelector<HTMLElement>('.tab[data-mode="position"]')?.click();
+  ($('#fen-input') as HTMLInputElement).value = fen;
+  if (loadFenIntoPosition(fen)) $('#suggest-btn').click();
 });
 
 document.addEventListener('keydown', (e) => {
