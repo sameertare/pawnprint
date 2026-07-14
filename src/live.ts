@@ -561,6 +561,11 @@ function handleStreamMessage(msg: any, status: HTMLElement) {
   if (msg.fen) {
     const fen = msg.fen.split(' ').length >= 4 ? msg.fen : msg.fen + ' w - - 0 1';
     appendFromStream(fen, msg.lm || msg.lastMove || null);
+    // Keep the move count in this status line current as the game progresses — it used to be
+    // set once from the initial history backfill and then never touched again, so it could sit
+    // showing a stale, much-lower count next to a board that had already moved on well past it,
+    // reading as if the app itself were behind rather than just this one line of text.
+    status.innerHTML = `${line.length - 1} move${line.length - 1 === 1 ? '' : 's'} so far. Following live — step back any time with ◀ ▶.`;
   }
 }
 
@@ -613,23 +618,34 @@ async function connectLive(id: string) {
   // moment we connect, independent of how long the history backfill takes.
   const streamPromise = streamLichessGame(id, signal, status);
 
-  // 2) Backfill full game history in parallel so earlier moves are still navigable. Only adopt
-  // it if it isn't already behind what the live stream has produced in the meantime — an export
-  // fetched concurrently with a fast-moving stream can otherwise reflect an earlier position and
-  // regress the board.
+  // 2) Backfill full game history in parallel so earlier moves are still navigable. Splice it in
+  // ahead of whatever the live stream has already built, rather than blindly overwriting `line`
+  // (a wholesale swap can race with concurrent stream deltas: the stream may have already
+  // rebased onto the current position and appended a few more moves by the time this resolves,
+  // and replacing the whole array at that point re-derails its own dedup bookkeeping, so
+  // subsequent legitimate deltas get appended as duplicates instead of recognised as already
+  // present — inflating the move count well past the real game length). Find where our current
+  // anchor (line[0], set by the stream's very first message) falls inside the backfill's full
+  // history, and keep the backfill's earlier moves plus everything our own line already has from
+  // that point on — the stream is the continuously-authoritative source for anything after the
+  // anchor, so we never need to trust the backfill's view of "now," only its view of "before."
   try {
     const r = await fetch(`https://lichess.org/game/export/${id}?clocks=false&evals=false&literate=false`, {
       headers: { Accept: 'application/x-chess-pgn' }, signal,
     });
     if (r.ok) {
       const built = buildLineFromPgn(await r.text());
-      if (built && built.line.length > 1 && built.line.length >= line.length) {
-        line = built.line;
-        evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
-        view = line.length - 1;
-        status.innerHTML = `Loaded ${line.length - 1} moves. Following live — step back any time with ◀ ▶.`;
-      }
-      if (built) {
+      if (built && built.line.length > 1) {
+        const anchorFen = line[0]?.fen;
+        const anchorIdx = anchorFen ? built.line.findIndex((n) => n.fen === anchorFen) : -1;
+        if (anchorIdx !== -1) {
+          const prependedCount = anchorIdx;
+          line = built.line.slice(0, anchorIdx).concat(line);
+          evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
+          if (liveFollow) view = line.length - 1;
+          else view += prependedCount;
+          status.innerHTML = `Loaded ${line.length - 1} moves. Following live — step back any time with ◀ ▶.`;
+        }
         pgnLoaded = true;
         setPlayers(built.white, built.black, built.wr, built.br);
         curEvent = built.event; curResult = built.result;
