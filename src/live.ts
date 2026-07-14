@@ -761,7 +761,6 @@ document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
     mode = newMode;
     ($('#panel-position') as HTMLElement).hidden = mode !== 'position';
     ($('#panel-live') as HTMLElement).hidden = mode !== 'live';
-    $('#live-layout').dataset.mode = mode;
     render();
   });
 });

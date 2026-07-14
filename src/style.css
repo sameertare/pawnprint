@@ -237,23 +237,33 @@ a { color: var(--blue); }
 .tab.active { background: var(--accent); color: #10140c; border-color: var(--accent-dark); font-weight: 600; }
 
 /* ---------- live layout ---------- */
-/* Three grid areas: the board itself (top-left), the move-feedback/analysis panels underneath
-   it, and the side panel (position setup or live-game connect form). In live mode the analysis
-   area and the side panel swap places — feedback moves to the right, the "Watch a live game"
-   connect panel moves under the board — via .live-layout[data-mode="live"] remapping which grid
-   cell each area name resolves to; the elements themselves keep the same grid-area the whole
-   time, so this is a pure CSS reflow, no DOM changes. */
+/* chesscompass.com-style: the board is the dominant element, and engine feedback (candidates,
+   move assessment, move list) stays docked beside it at all times — not below it, where a big
+   board would push it out of view and require scrolling to see. The board's own setup panel
+   (position-mode's FEN/PGN form, or live-mode's connect form) is the secondary control, so it
+   sits under the board instead. Same grid areas in both modes now — analysis is always area
+   "analysis" (right column), the mode-specific panel is always "panel" (left column, row 2). */
 .live-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 460px) 1fr;
-  grid-template-areas: "board panel" "analysis panel";
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  grid-template-areas: "board analysis" "panel analysis";
   gap: 22px;
   align-items: start;
 }
-.live-layout[data-mode="live"] { grid-template-areas: "board analysis" "panel analysis"; }
-.board-col { grid-area: board; display: flex; flex-direction: column; gap: 10px; }
-.analysis-col { grid-area: analysis; display: flex; flex-direction: column; gap: 10px; }
-.side-col { grid-area: panel; }
+.board-col {
+  grid-area: board;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: min(760px, calc(100vh - 260px));
+  margin: 0 auto;
+  min-width: 0; /* grid items default to min-width:auto — without this the board refuses to
+    shrink below its content's intrinsic width (nav-row buttons etc.) and overflows narrow
+    viewports instead of shrinking with the column. */
+}
+.analysis-col { grid-area: analysis; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.side-col { grid-area: panel; min-width: 0; }
 .mode-panel .stack { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; font-size: 0.88rem; color: var(--text-dim); }
 
 /* ---------- opening explorer layout ---------- */

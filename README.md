@@ -158,7 +158,7 @@ OpenFile is an installable PWA (Progressive Web App):
 
 ## Tool 2 — Live & Engine (`/live.html`)
 
-Two modes, one board (Stockfish 18 runs locally in the browser):
+Two modes, one board (Stockfish 18 runs locally in the browser). Layout follows chesscompass.com's analysis-board pattern: a large board (sized off both the available width and your screen's height, not a fixed cap) with engine feedback — candidate moves, move assessment, move list — docked in a compact panel immediately beside it in both modes, so you never have to scroll past the board to see it. Each mode's own setup form (FEN/PGN entry, or the lichess connect form) sits underneath the board instead, since it's used once per session rather than watched continuously.
 
 **Any position**
 - Paste a FEN or click pieces to play moves on the board (moves are validated by chess.js).
@@ -171,7 +171,6 @@ Two modes, one board (Stockfish 18 runs locally in the browser):
 - Paste a lichess **study** link (with or without a chapter) to load that chapter as a static, navigable game — click pieces or step with ◀ ▶, same as Any Position. A study with multiple chapters loads chapter 1, with a note to paste a direct chapter link for another.
 - Paste a lichess **analysis-board** link (with an embedded FEN) or just a bare **FEN** to load that single position.
 - Every move gets **feedback** — Best / OK / Inaccuracy ?! / Mistake ? / Blunder ?? — based on the win-probability swing, with the engine's better move shown when relevant. The **● LIVE** badge (and jump-back-to-live button) only appears for an actual live game, not a study/position load.
-- In this mode, the layout swaps sides: the move-feedback/candidates panel moves to the right, and the "Watch a live game, study, or position" connect form sits directly under the board on the left — so the connect form is out of the way once you're actually watching a game, and the feedback you're there for gets the prime spot next to the board. Any Position mode keeps the original layout (feedback under the board, setup panel on the right).
 
 **Top candidate moves (both modes)** — the currently viewed position always shows the top 3 engine moves (Stockfish's MultiPV), each with its evaluation and a short continuation, drawn on the board as three ranked arrows (green/gold/blue, thickest and brightest for the best move) — useful for seeing what else was worth considering, not just the single best line.
 
@@ -218,7 +217,7 @@ The pairing engine (`src/swissEngine.ts`) is pure and framework-free. It has bee
 
 ## Tool 4 — Opening Explorer (`/opening-explorer.html`)
 
-Turns your own PGNs into a branching opening tree — like [openingtree.com](https://www.openingtree.com/). Its own wider layout (a big board dominating the page next to a compact tree/games panel, chesscompass.com-style) is separate from the narrower one Live & Engine uses — the two tools' side panels have different content, so each gets a board size tuned to what it's next to.
+Turns your own PGNs into a branching opening tree — like [openingtree.com](https://www.openingtree.com/). Same chesscompass.com-style big-board layout as Live & Engine, in its own wider page (up to 1400px instead of the site's usual 1060px) since the tree/games panel needs more room than Live & Engine's feedback panel does.
 
 - **Two independent profiles:** a **🧑 My Repertoire** / **🎯 Opponent Prep** tab switch at the top. Each holds its own loaded games, detected player, and tree entirely independently — load your own games in one tab and an upcoming opponent's account in the other, then flip between the two trees instantly with no re-fetching. A status line under the tabs always shows what's loaded in both.
 - **Input (per profile):** drop PGN file(s), try the bundled sample, or fetch an account's games directly by username — from **lichess** (`GET lichess.org/api/games/user/:username`, streamed as PGN) or **chess.com** (its public "Published Data API": fetch the account's monthly archive list, then the N most recent months in parallel, concatenating each game's own `pgn` field; its `[Site]` header is never a real URL, so the game's separate `url` field is injected as a `[Link]` header so the games-list "View" link still resolves). Neither needs auth for public games. The main player is auto-detected the same way Performance Analysis does it (most frequent name across games, with casing/"Last, First"/nickname variants folded together) — no picking required; a username fetch skips the heuristic entirely and attributes every game to that account directly.
