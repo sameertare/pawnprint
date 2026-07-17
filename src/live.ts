@@ -105,6 +105,7 @@ let liveFollow = true;
 let pumping = false;
 let playUserColor: 'w' | 'b' = 'w';
 let playEngineThinking = false;
+let playActive = false; // true only once a Play-vs-Engine game has been started/loaded
 // Tracked purely for the "Export PGN" button's header block — best-effort, not authoritative.
 let curWhite: string | undefined;
 let curBlack: string | undefined;
@@ -215,8 +216,8 @@ function render() {
   // field ('w'/'b') — the `stm` above is the display string ("White"/"Black") and comparing that
   // to 'w'/'b' never matched, which pinned the status to "Engine thinking…" on every render.
   const engineTurnInPlay =
-    mode === 'play' && !c.isGameOver() && fen.split(' ')[1] !== playUserColor;
-  if (mode === 'play' && line.length > 1) {
+    mode === 'play' && playActive && !c.isGameOver() && fen.split(' ')[1] !== playUserColor;
+  if (mode === 'play' && playActive) {
     const status = $('#play-status');
     if (c.isGameOver()) {
       status.textContent = c.isCheckmate() ? 'Checkmate!' : c.isStalemate() ? 'Stalemate!' : c.isDraw() ? 'Draw!' : 'Game over!';
@@ -474,45 +475,52 @@ const debouncedUpdateCandidates = debounce(updateCandidates, 80);
 // ======================================================================
 // PLAY VS ENGINE — auto-play engine moves
 // ======================================================================
+// Bumped whenever the line is reset/reloaded/taken back, so an engine search that is still in
+// flight for the old position discards its result instead of splicing it into the new line.
+let playMoveToken = 0;
+function invalidatePlayEngineMove() {
+  playMoveToken++;
+  playEngineThinking = false;
+}
+
 async function playEngineMove() {
-  if (playEngineThinking) return;
+  if (mode !== 'play' || !playActive || playEngineThinking) return;
   const fen = line[view].fen;
   const c = new Chess(fen);
+  const status = $('#play-status');
   if (c.isGameOver()) {
-    const reason = c.isCheckmate() ? 'Checkmate' : c.isStalemate() ? 'Stalemate' : c.isDraw() ? 'Draw' : 'Game over';
-    $('#play-status').textContent = reason + '. Game over!';
+    status.textContent = c.isCheckmate() ? 'Checkmate!' : c.isStalemate() ? 'Stalemate!' : c.isDraw() ? 'Draw!' : 'Game over!';
     return;
   }
+  // The engine only ever moves for its own colour. Without this it would happily play the user's
+  // move too, so one side ended up making several moves in a row and the other never got a turn.
+  if (c.turn() === playUserColor) return;
 
+  const token = ++playMoveToken;
   playEngineThinking = true;
-  const status = $('#play-status');
   status.textContent = 'Engine thinking…';
   try {
     const eng = await getEngine();
     const res = await eng.evaluate(fen, curDepth());
-    if (!res.bestmove) {
-      status.textContent = 'No move found.';
-      playEngineThinking = false;
-      return;
-    }
+    // The board may have moved on while we were searching (take-back, reset, a new game loaded).
+    // The move we just computed belongs to a position that is no longer on the board, so applying
+    // it would splice a move from a stale line into the current one and derail the move order.
+    if (token !== playMoveToken || mode !== 'play' || line[view]?.fen !== fen) return;
+    if (!res.bestmove) { status.textContent = 'No move found.'; return; }
 
-    // Play the engine's best move
     const uci = res.bestmove;
     const m = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.length > 4 ? uci.slice(4) : undefined });
-    if (m) {
-      truncateAfter(view);
-      appendNode(m.after, uci);
-      view = line.length - 1;
-      render(); // sets "Checkmate!"/"Draw!" etc. when the engine's move ends the game
-      void pump();
-      // If the game continues, it's the user's turn again — render() leaves a generic status, so
-      // make it explicit. Game-over messages set by render() are left untouched.
-      if (!new Chess(line[view].fen).isGameOver()) status.textContent = 'Your turn';
-    }
-  } catch (e) {
+    if (!m) { status.textContent = 'Engine returned an illegal move.'; return; }
+    truncateAfter(view);
+    appendNode(m.after, uci);
+    view = line.length - 1;
+    render(); // owns the status: "Your turn" / "Checkmate!" / etc.
+    void pump();
+  } catch {
     status.textContent = 'Engine error.';
   } finally {
-    playEngineThinking = false;
+    // Only release the lock if a newer game/search hasn't already taken ownership.
+    if (token === playMoveToken) playEngineThinking = false;
   }
 }
 
@@ -525,6 +533,10 @@ board.onSquareClick = (sq) => {
   if (mode !== 'position' && mode !== 'play' && connKind !== 'static') return;
   const fen = line[view].fen;
   const c = new Chess(fen);
+  // In Play mode you move only your own pieces, only on your own turn, only once a game is active,
+  // and never while the engine is mid-search — otherwise the engine's reply (computed for the
+  // previous position) lands on a line that has already moved on, and the move order breaks.
+  if (mode === 'play' && (!playActive || playEngineThinking || c.turn() !== playUserColor)) return;
   const piece = c.get(sq as any);
   const sel = board.getSelected();
   if (sel && sel !== sq) {
@@ -537,11 +549,7 @@ board.onSquareClick = (sq) => {
       $('#engine-out').innerHTML = '';
       render();
       void pump();
-
-      // In play mode, have engine respond after user's move
-      if (mode === 'play' && !playEngineThinking) {
-        void playEngineMove();
-      }
+      if (mode === 'play') void playEngineMove(); // no-op unless it's now the engine's turn
       return;
     }
   }
@@ -977,7 +985,7 @@ $('#play-start-btn').addEventListener('click', () => {
   const colorSelect = ($('#play-color') as HTMLSelectElement).value as 'w' | 'b';
   const fenInput = ($('#play-fen-input') as HTMLInputElement).value.trim();
   playUserColor = colorSelect;
-  playEngineThinking = false;
+  invalidatePlayEngineMove();
 
   const fen = fenInput || START;
   try {
@@ -988,41 +996,37 @@ $('#play-start-btn').addEventListener('click', () => {
   }
 
   resetLine(fen);
-  ($('#play-status') as HTMLElement).textContent = playUserColor === 'w' ? 'Your turn (White)' : 'Engine thinking…';
+  playActive = true;
   ($('#play-undo-btn') as HTMLElement).hidden = false;
   ($('#play-reset-btn') as HTMLElement).hidden = false;
   render();
   void pump();
-
-  // If engine is playing first (black), have it make the first move
-  if (playUserColor === 'b') {
-    void playEngineMove();
-  }
+  // Whoever is to move in the starting position: if it's the engine's colour, it moves first;
+  // otherwise render() has already set "Your turn".
+  void playEngineMove();
 });
 
 $('#play-undo-btn').addEventListener('click', () => {
   if (line.length < 3) return; // need at least one full move pair
+  invalidatePlayEngineMove(); // cancel any in-flight engine search before mutating the line
   truncateAfter(line.length - 3);
   view = line.length - 1;
-  playEngineThinking = false;
-  ($('#play-status') as HTMLElement).textContent = 'Your turn';
   render();
   void pump();
+  void playEngineMove(); // no-op unless the take-back somehow landed on the engine's turn
 });
 
 $('#play-reset-btn').addEventListener('click', () => {
   const colorSelect = ($('#play-color') as HTMLSelectElement).value as 'w' | 'b';
   const fenInput = ($('#play-fen-input') as HTMLInputElement).value.trim();
   playUserColor = colorSelect;
-  playEngineThinking = false;
+  invalidatePlayEngineMove();
   const fen = fenInput || START;
   resetLine(fen);
-  ($('#play-status') as HTMLElement).textContent = playUserColor === 'w' ? 'Your turn (White)' : 'Engine thinking…';
+  playActive = true;
   render();
   void pump();
-  if (playUserColor === 'b') {
-    void playEngineMove();
-  }
+  void playEngineMove(); // engine moves first if the start position is its colour
 });
 
 /** Fetch a lichess game/study/FEN and hand its latest position to Play-vs-Engine mode, so the
@@ -1065,25 +1069,21 @@ async function loadLichessGameForPlay(raw: string) {
   if (!built || built.line.length === 0) { status.textContent = 'Could not read a position from that.'; return; }
 
   // Adopt the loaded line and jump to its latest position — that's where the user takes over.
+  invalidatePlayEngineMove(); // discard any search still running for the previous position/game
   line = built.line;
   evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
   view = line.length - 1;
   curWhite = built.white; curBlack = built.black; curEvent = built.event; curResult = built.result;
 
   playUserColor = ($('#play-color') as HTMLSelectElement).value as 'w' | 'b';
-  playEngineThinking = false;
+  playActive = true;
   ($('#play-undo-btn') as HTMLElement).hidden = false;
   ($('#play-reset-btn') as HTMLElement).hidden = false;
   render();
   void pump();
-
-  // If it's the engine's turn at the loaded position, let it move; otherwise it's the user's turn.
-  const stm = line[view].fen.split(' ')[1] as 'w' | 'b';
-  if (stm !== playUserColor) {
-    void playEngineMove();
-  } else {
-    status.textContent = `Loaded ${line.length - 1} move(s). Your turn (${playUserColor === 'w' ? 'White' : 'Black'}) — play on!`;
-  }
+  // If it's the engine's colour to move at the loaded position it replies; otherwise render() has
+  // already set the status to "Your turn".
+  void playEngineMove();
 }
 
 $('#play-load-lichess-btn').addEventListener('click', () => {
@@ -1101,12 +1101,16 @@ document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
     ($('#panel-live') as HTMLElement).hidden = mode !== 'live';
     ($('#panel-play') as HTMLElement).hidden = mode !== 'play';
     if (mode === 'play') {
+      invalidatePlayEngineMove();
+      playActive = false;
       resetLine(START);
       playUserColor = 'w';
-      playEngineThinking = false;
-      ($('#play-status') as HTMLElement).textContent = '';
+      ($('#play-status') as HTMLElement).textContent = 'Press "Start game" or load a lichess game to begin.';
       ($('#play-undo-btn') as HTMLElement).hidden = true;
       ($('#play-reset-btn') as HTMLElement).hidden = true;
+    } else {
+      // Leaving Play mode — cancel any pending engine move so it can't fire in another tab.
+      invalidatePlayEngineMove();
     }
     render();
   });
