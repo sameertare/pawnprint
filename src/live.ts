@@ -100,9 +100,11 @@ let evalsW: (number | null)[] = [null]; // white-perspective centipawns
 let bestU: (string | null)[] = [null];  // engine best move (UCI) at each position
 let mateN: (number | null)[] = [null];  // mate distance (side-to-move perspective)
 let view = 0;
-let mode: 'position' | 'live' = 'position';
+let mode: 'position' | 'live' | 'play' = 'position';
 let liveFollow = true;
 let pumping = false;
+let playUserColor: 'w' | 'b' = 'w';
+let playEngineThinking = false;
 // Tracked purely for the "Export PGN" button's header block — best-effort, not authoritative.
 let curWhite: string | undefined;
 let curBlack: string | undefined;
@@ -110,7 +112,9 @@ let curEvent: string | undefined;
 let curResult: string | undefined;
 
 function curDepth(): number {
-  const sel = mode === 'live' ? '#depth-live' : '#depth-position';
+  let sel = '#depth-position';
+  if (mode === 'live') sel = '#depth-live';
+  else if (mode === 'play') sel = '#depth-play';
   return parseInt(($(sel) as HTMLSelectElement).value, 10) || 14;
 }
 
@@ -206,6 +210,20 @@ function render() {
   updateNav();
   renderEvalGraph();
   updatePgnOutput();
+
+  // Update play mode status
+  if (mode === 'play' && line.length > 1) {
+    const status = $('#play-status');
+    if (c.isGameOver()) {
+      const reason = c.isCheckmate() ? 'Checkmate!' : c.isStalemate() ? 'Stalemate!' : c.isDraw() ? 'Draw!' : 'Game over!';
+      status.textContent = reason;
+    } else {
+      const stm = fen.split(' ')[1] === 'w' ? 'White' : 'Black';
+      const isUserTurn = (stm === 'w' && playUserColor === 'w') || (stm === 'b' && playUserColor === 'b');
+      status.textContent = isUserTurn ? 'Your turn' : 'Engine thinking…';
+    }
+  }
+
   void debouncedUpdateCandidates();
 }
 
@@ -399,12 +417,55 @@ async function updateCandidates() {
 const debouncedUpdateCandidates = debounce(updateCandidates, 80);
 
 // ======================================================================
+// PLAY VS ENGINE — auto-play engine moves
+// ======================================================================
+async function playEngineMove() {
+  if (playEngineThinking) return;
+  const fen = line[view].fen;
+  const c = new Chess(fen);
+  if (c.isGameOver()) {
+    const reason = c.isCheckmate() ? 'Checkmate' : c.isStalemate() ? 'Stalemate' : c.isDraw() ? 'Draw' : 'Game over';
+    $('#play-status').textContent = reason + '. Game over!';
+    return;
+  }
+
+  playEngineThinking = true;
+  const status = $('#play-status');
+  status.textContent = 'Engine thinking…';
+  try {
+    const eng = await getEngine();
+    const res = await eng.evaluate(fen, curDepth());
+    if (!res.bestmove) {
+      status.textContent = 'No move found.';
+      playEngineThinking = false;
+      return;
+    }
+
+    // Play the engine's best move
+    const uci = res.bestmove;
+    const m = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.length > 4 ? uci.slice(4) : undefined });
+    if (m) {
+      truncateAfter(view);
+      appendNode(m.after, uci);
+      view = line.length - 1;
+      render();
+      void pump();
+      status.textContent = '';
+    }
+  } catch (e) {
+    status.textContent = 'Engine error.';
+  } finally {
+    playEngineThinking = false;
+  }
+}
+
+// ======================================================================
 // POSITION TAB — FEN / PGN / click-to-move
 // ======================================================================
 board.onSquareClick = (sq) => {
-  // Click-to-move works in the Position tab, and also on a static (study/FEN) load in the Live
-  // tab — but not while genuinely following a live game, where the board reflects real moves.
-  if (mode !== 'position' && connKind !== 'static') return;
+  // Click-to-move works in the Position tab, Play mode, and static FEN/study loads in Live tab.
+  if (mode === 'live' && connKind === 'game') return; // don't allow clicking during live game
+  if (mode !== 'position' && mode !== 'play' && connKind !== 'static') return;
   const fen = line[view].fen;
   const c = new Chess(fen);
   const piece = c.get(sq as any);
@@ -419,6 +480,11 @@ board.onSquareClick = (sq) => {
       $('#engine-out').innerHTML = '';
       render();
       void pump();
+
+      // In play mode, have engine respond after user's move
+      if (mode === 'play' && !playEngineThinking) {
+        void playEngineMove();
+      }
       return;
     }
   }
@@ -847,15 +913,79 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ======================================================================
+// PLAY VS ENGINE TAB — event listeners
+// ======================================================================
+$('#play-start-btn').addEventListener('click', () => {
+  const colorSelect = ($('#play-color') as HTMLSelectElement).value as 'w' | 'b';
+  const fenInput = ($('#play-fen-input') as HTMLInputElement).value.trim();
+  playUserColor = colorSelect;
+  playEngineThinking = false;
+
+  const fen = fenInput || START;
+  try {
+    new Chess(fen); // validate
+  } catch {
+    $('#play-status').textContent = 'Invalid FEN';
+    return;
+  }
+
+  resetLine(fen);
+  ($('#play-status') as HTMLElement).textContent = playUserColor === 'w' ? 'Your turn (White)' : 'Engine thinking…';
+  ($('#play-undo-btn') as HTMLElement).hidden = false;
+  ($('#play-reset-btn') as HTMLElement).hidden = false;
+  render();
+  void pump();
+
+  // If engine is playing first (black), have it make the first move
+  if (playUserColor === 'b') {
+    void playEngineMove();
+  }
+});
+
+$('#play-undo-btn').addEventListener('click', () => {
+  if (line.length < 3) return; // need at least one full move pair
+  truncateAfter(line.length - 3);
+  view = line.length - 1;
+  playEngineThinking = false;
+  ($('#play-status') as HTMLElement).textContent = 'Your turn';
+  render();
+  void pump();
+});
+
+$('#play-reset-btn').addEventListener('click', () => {
+  const colorSelect = ($('#play-color') as HTMLSelectElement).value as 'w' | 'b';
+  const fenInput = ($('#play-fen-input') as HTMLInputElement).value.trim();
+  playUserColor = colorSelect;
+  playEngineThinking = false;
+  const fen = fenInput || START;
+  resetLine(fen);
+  ($('#play-status') as HTMLElement).textContent = playUserColor === 'w' ? 'Your turn (White)' : 'Engine thinking…';
+  render();
+  void pump();
+  if (playUserColor === 'b') {
+    void playEngineMove();
+  }
+});
+
 document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
     tab.classList.add('active');
-    const newMode = (tab.dataset.mode as 'position' | 'live') ?? 'position';
+    const newMode = (tab.dataset.mode as 'position' | 'live' | 'play') ?? 'position';
     if (newMode === 'position' && mode === 'live') disconnect();
     mode = newMode;
     ($('#panel-position') as HTMLElement).hidden = mode !== 'position';
     ($('#panel-live') as HTMLElement).hidden = mode !== 'live';
+    ($('#panel-play') as HTMLElement).hidden = mode !== 'play';
+    if (mode === 'play') {
+      resetLine(START);
+      playUserColor = 'w';
+      playEngineThinking = false;
+      ($('#play-status') as HTMLElement).textContent = '';
+      ($('#play-undo-btn') as HTMLElement).hidden = true;
+      ($('#play-reset-btn') as HTMLElement).hidden = true;
+    }
     render();
   });
 });

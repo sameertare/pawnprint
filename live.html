@@ -34,6 +34,7 @@
 
       <div class="tabbar">
         <button class="tab active" data-mode="position">♟ Any position</button>
+        <button class="tab" data-mode="play">🎮 Play vs Engine</button>
         <button class="tab" data-mode="live">📡 Live lichess game</button>
       </div>
 
@@ -100,6 +101,37 @@
               <button id="play-best-btn" class="btn" hidden>▶ Play best move</button>
             </div>
             <div id="engine-out" class="engine-out"></div>
+          </section>
+
+          <!-- PLAY VS ENGINE MODE -->
+          <section class="card mode-panel" id="panel-play" hidden>
+            <h2>Play vs Engine</h2>
+            <p class="hint">Click pieces to play moves as White or Black. The engine responds automatically with its best move.</p>
+            <label class="stack">Choose your color
+              <select id="play-color" class="text-input">
+                <option value="w" selected>White (you play first)</option>
+                <option value="b">Black (engine plays first)</option>
+              </select>
+            </label>
+            <label class="stack">Starting position (FEN)
+              <input type="text" id="play-fen-input" class="text-input" placeholder="Leave empty for standard position, or paste a FEN" />
+            </label>
+            <div class="config-row">
+              <label>Engine depth
+                <select id="depth-play">
+                  <option value="12">Depth 12</option>
+                  <option value="15" selected>Depth 15</option>
+                  <option value="18">Depth 18</option>
+                  <option value="22">Depth 22 (slow)</option>
+                </select>
+              </label>
+              <button id="play-start-btn" class="btn btn-primary">▶ Start game</button>
+            </div>
+            <div class="btn-row">
+              <button id="play-undo-btn" class="btn btn-ghost" hidden>↶ Take back both</button>
+              <button id="play-reset-btn" class="btn btn-ghost" hidden>🔄 Reset</button>
+            </div>
+            <div id="play-status" class="hint"></div>
           </section>
 
           <!-- LIVE MODE -->
