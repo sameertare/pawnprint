@@ -237,8 +237,8 @@ function renderEvalGraph() {
 function updatePgnOutput() {
   const el = $('#live-pgn-moves');
   const label = $('#live-pgn-label');
-  // Only the Live tab shows the vertical move grid; hide it everywhere else.
-  if (mode !== 'live' || line.length < 2) {
+  // The Live and Play-vs-Engine tabs show the vertical move grid; hide it everywhere else.
+  if ((mode !== 'live' && mode !== 'play') || line.length < 2) {
     el.hidden = true;
     label.hidden = true;
     el.innerHTML = '';
@@ -247,21 +247,29 @@ function updatePgnOutput() {
   label.hidden = false;
   el.hidden = false;
   // Lichess-style vertical move list: one row per full move — number, White's move, Black's move.
-  const rows: string[] = [];
-  for (let k = 1; k < line.length; k += 2) {
-    const moveNo = parseInt(line[k - 1].fen.split(' ')[5], 10);
-    const wSan = line[k]?.san ?? '';
-    const wCls = moveColorClass(k);
-    const white = `<span class="lpm-move ${wCls} ${k === view ? 'cur' : ''}" data-ply="${k}">${wSan || '…'}</span>`;
-    let black = '<span class="lpm-move lpm-empty"></span>';
-    if (k + 1 < line.length) {
-      const bSan = line[k + 1]?.san ?? '';
-      const bCls = moveColorClass(k + 1);
-      black = `<span class="lpm-move ${bCls} ${k + 1 === view ? 'cur' : ''}" data-ply="${k + 1}">${bSan}</span>`;
-    }
-    rows.push(`<span class="lpm-num">${moveNo}.</span>${white}${black}`);
+  // Each ply is placed in the White or Black column by its actual side-to-move (read from the
+  // position it was played from), so a line that begins mid-game — Black to move, or a live-game
+  // backfill — still aligns correctly instead of shifting every move into the wrong column.
+  const cell = (k: number) => {
+    const san = line[k]?.san ?? '?';
+    return `<span class="lpm-move ${moveColorClass(k)} ${k === view ? 'cur' : ''}" data-ply="${k}">${san}</span>`;
+  };
+  const emptyCell = '<span class="lpm-move lpm-empty"></span>';
+  const gapCell = '<span class="lpm-move lpm-empty">…</span>';
+  const rowsMap = new Map<number, { white: string; black: string }>();
+  const order: number[] = [];
+  for (let k = 1; k < line.length; k++) {
+    const parts = line[k - 1].fen.split(' ');
+    const isWhiteMove = parts[1] === 'w';
+    const moveNo = parseInt(parts[5], 10);
+    if (!rowsMap.has(moveNo)) { rowsMap.set(moveNo, { white: gapCell, black: emptyCell }); order.push(moveNo); }
+    const row = rowsMap.get(moveNo)!;
+    if (isWhiteMove) row.white = cell(k); else row.black = cell(k);
   }
-  el.innerHTML = rows.join('');
+  el.innerHTML = order.map((no) => {
+    const r = rowsMap.get(no)!;
+    return `<span class="lpm-num">${no}.</span>${r.white}${r.black}`;
+  }).join('');
   el.querySelectorAll<HTMLElement>('.lpm-move[data-ply]').forEach((m) =>
     m.addEventListener('click', () => goto(parseInt(m.dataset.ply!, 10)))
   );
@@ -317,9 +325,9 @@ function renderAssess(c: Chess, fen: string) {
 
 function renderMoveList() {
   const ml = $('#move-list');
-  // Live mode uses the vertical lichess-style move grid (renderLiveMoves) instead of this
+  // Live and Play-vs-Engine modes use the vertical lichess-style move grid instead of this
   // horizontal list, so keep the horizontal one out of the way there.
-  if (mode === 'live') { ml.hidden = true; ml.innerHTML = ''; return; }
+  if (mode === 'live' || mode === 'play') { ml.hidden = true; ml.innerHTML = ''; return; }
   const n = line.length;
   if (n <= 1) { ml.hidden = true; ml.innerHTML = ''; return; }
   ml.hidden = false;
