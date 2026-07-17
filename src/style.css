@@ -191,6 +191,34 @@ a { color: var(--blue); }
 
 .app-footer { text-align: center; color: var(--text-dim); font-size: 0.8rem; margin-top: 30px; }
 
+/* ---------- analytics widget (home page) ---------- */
+.analytics-section { margin-top: 40px; }
+.analytics-title { font-size: 1.15rem; margin-bottom: 14px; }
+.analytics-widget {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px;
+}
+.an-loading { padding: 20px 0; }
+.an-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
+.an-stat {
+  flex: 1 1 120px; background: var(--bg-inset); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 16px; text-align: center;
+}
+.an-stat-num { font-size: 1.9rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.an-stat-label { font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; }
+.an-map {
+  background: var(--bg-inset); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; overflow: hidden;
+}
+.world-map { display: block; width: 100%; height: auto; }
+.wm-land { fill: var(--border); }
+.wm-hit-dot {
+  fill: var(--accent); stroke: var(--bg); stroke-width: 1;
+  filter: drop-shadow(0 0 4px var(--accent)); cursor: pointer;
+}
+.wm-hit-dot:hover { fill: var(--gold); filter: drop-shadow(0 0 6px var(--gold)); }
+.an-note { margin-top: 10px; }
+
 /* ---------- top nav ---------- */
 .topnav {
   display: flex; align-items: center; justify-content: space-between;

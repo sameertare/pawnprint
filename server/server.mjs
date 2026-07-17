@@ -11,13 +11,88 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const REPORTS_DIR = path.join(ROOT, 'reports');
+const ANALYTICS_FILE = path.join(ROOT, 'analytics.json');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8787;
 
 const app = express();
+app.set('trust proxy', true); // so req.ip reflects X-Forwarded-For behind a host's proxy
 app.use(express.json());
 app.use(express.text({ type: ['text/markdown', 'text/plain'], limit: '20mb' }));
 
 const safeName = (name) => /^[\w.-]{1,80}$/.test(name);
+
+// ---- Visitor analytics (aggregated; no raw IPs are ever persisted) ----
+// Stored shape: { totalViews, points: { "lat,lng": { lat, lng, city, country, count } } }
+let analytics = { totalViews: 0, points: {} };
+const geoCache = new Map(); // ip -> { lat, lng, city, country } | null (in-memory only)
+
+async function loadAnalytics() {
+  try {
+    analytics = JSON.parse(await fs.readFile(ANALYTICS_FILE, 'utf8'));
+    if (!analytics.points) analytics.points = {};
+    if (typeof analytics.totalViews !== 'number') analytics.totalViews = 0;
+  } catch { /* first run — keep defaults */ }
+}
+let writeQueue = Promise.resolve();
+function saveAnalytics() {
+  // Serialize writes so concurrent hits can't interleave and corrupt the file.
+  writeQueue = writeQueue.then(() =>
+    fs.writeFile(ANALYTICS_FILE, JSON.stringify(analytics), 'utf8').catch(() => {})
+  );
+  return writeQueue;
+}
+
+function isPrivateIp(ip) {
+  if (!ip) return true;
+  return (
+    ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') ||
+    ip.startsWith('192.168.') || ip.startsWith('::ffff:127.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) || ip === 'localhost'
+  );
+}
+
+/** Best-effort, coarse (≈city-level) geolocation from an IP, cached in memory. */
+async function geolocate(ip) {
+  if (isPrivateIp(ip)) return null;
+  if (geoCache.has(ip)) return geoCache.get(ip);
+  let result = null;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const r = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) {
+      const d = await r.json();
+      if (!d.error && typeof d.latitude === 'number' && typeof d.longitude === 'number') {
+        result = { lat: d.latitude, lng: d.longitude, city: d.city || '', country: d.country_name || '' };
+      }
+    }
+  } catch { /* offline / rate-limited — no point added */ }
+  geoCache.set(ip, result);
+  return result;
+}
+
+app.post('/api/analytics/hit', async (req, res) => {
+  analytics.totalViews++;
+  const geo = await geolocate(req.ip);
+  if (geo) {
+    // Round to whole degrees so dots cluster by region and no one is pinpointed.
+    const lat = Math.round(geo.lat);
+    const lng = Math.round(geo.lng);
+    const key = `${lat},${lng}`;
+    const p = analytics.points[key] || { lat, lng, city: geo.city, country: geo.country, count: 0 };
+    p.count++;
+    p.city = geo.city || p.city;
+    p.country = geo.country || p.country;
+    analytics.points[key] = p;
+  }
+  saveAnalytics();
+  res.json({ ok: true, totalViews: analytics.totalViews });
+});
+
+app.get('/api/analytics', (_req, res) => {
+  res.json({ totalViews: analytics.totalViews, points: Object.values(analytics.points) });
+});
 
 app.get('/api/reports', async (_req, res) => {
   try {
@@ -105,6 +180,7 @@ app.use(express.static(DIST)); // includes the sample PGNs (bundled from public/
 // Unknown non-API, non-file routes fall back to the hub page.
 app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(DIST, 'index.html')));
 
+await loadAnalytics();
 app.listen(PORT, () => {
   console.log(`OpenFile running at http://localhost:${PORT}`);
 });
