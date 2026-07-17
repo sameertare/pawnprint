@@ -235,16 +235,32 @@ function renderEvalGraph() {
 }
 
 function updatePgnOutput() {
-  const textarea = $('#live-pgn-output') as HTMLTextAreaElement;
-  if (mode !== 'live' || line.length < 2) {
-    textarea.value = '';
+  const el = $('#live-pgn-moves');
+  if (mode !== 'live') return;
+  if (line.length < 2) {
+    el.innerHTML = '<span class="hint live-pgn-empty">Connect to a game to see moves here</span>';
     return;
   }
-  const pgn = buildPgnFromLine({
-    white: curWhite, black: curBlack, event: curEvent, result: curResult,
-    line, evalsW, bestU,
-  });
-  textarea.value = pgn;
+  // Lichess-style vertical move list: one row per full move — number, White's move, Black's move.
+  const rows: string[] = [];
+  for (let k = 1; k < line.length; k += 2) {
+    const moveNo = parseInt(line[k - 1].fen.split(' ')[5], 10);
+    const wSan = line[k]?.san ?? '';
+    const wCls = moveColorClass(k);
+    const white = `<span class="lpm-move ${wCls} ${k === view ? 'cur' : ''}" data-ply="${k}">${wSan || '…'}</span>`;
+    let black = '<span class="lpm-move lpm-empty"></span>';
+    if (k + 1 < line.length) {
+      const bSan = line[k + 1]?.san ?? '';
+      const bCls = moveColorClass(k + 1);
+      black = `<span class="lpm-move ${bCls} ${k + 1 === view ? 'cur' : ''}" data-ply="${k + 1}">${bSan}</span>`;
+    }
+    rows.push(`<span class="lpm-num">${moveNo}.</span>${white}${black}`);
+  }
+  el.innerHTML = rows.join('');
+  el.querySelectorAll<HTMLElement>('.lpm-move[data-ply]').forEach((m) =>
+    m.addEventListener('click', () => goto(parseInt(m.dataset.ply!, 10)))
+  );
+  el.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
 }
 
 function renderAssess(c: Chess, fen: string) {

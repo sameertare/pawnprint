@@ -160,9 +160,8 @@
               <button id="copy-pgn-btn" class="btn btn-ghost" title="Copy the game so far as PGN">⧉ Copy PGN</button>
               <button id="analyze-position-btn" class="btn btn-primary" title="Load this exact position into Any Position mode and run a deep engine search">🔎 Analyze in Any Position</button>
             </div>
-            <label class="stack">Game PGN
-              <textarea id="live-pgn-output" class="text-area" rows="6" readonly placeholder="Connect to a game to view its PGN here"></textarea>
-            </label>
+            <div class="live-pgn-label">Moves</div>
+            <div id="live-pgn-moves" class="live-pgn-moves"><span class="hint live-pgn-empty">Connect to a game to see moves here</span></div>
           </section>
         </div>
       </div>

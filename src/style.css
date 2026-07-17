@@ -394,6 +394,31 @@ a { color: var(--blue); }
 .ml-move.m-blunder { color: var(--red); }
 .ml-move.cur.m-blunder, .ml-move.cur.m-mistake, .ml-move.cur.m-inacc, .ml-move.cur.m-best { color: #10140c; }
 
+/* ---------- lichess-style vertical live move list ---------- */
+.live-pgn-label { margin-top: 12px; font-size: 0.85rem; color: var(--text-dim); font-weight: 600; }
+.live-pgn-moves {
+  margin-top: 6px; max-height: 320px; overflow-y: auto;
+  background: var(--bg-inset); border: 1px solid var(--border); border-radius: 8px;
+  display: grid; grid-template-columns: auto 1fr 1fr; align-content: start;
+  font-size: 0.92rem;
+}
+.live-pgn-moves .live-pgn-empty { grid-column: 1 / -1; padding: 10px 12px; }
+.lpm-num {
+  color: var(--text-dim); font-variant-numeric: tabular-nums; text-align: right;
+  padding: 3px 8px 3px 10px; background: var(--bg-card); user-select: none;
+}
+.lpm-move {
+  font-family: ui-monospace, monospace; cursor: pointer; padding: 3px 10px;
+}
+.lpm-move.lpm-empty { cursor: default; }
+.lpm-move:not(.lpm-empty):hover { background: var(--bg-card); }
+.lpm-move.cur { background: var(--accent); color: #10140c; font-weight: 700; }
+.lpm-move.m-best { color: var(--accent); }
+.lpm-move.m-inacc { color: var(--gold); }
+.lpm-move.m-mistake { color: #e0955c; }
+.lpm-move.m-blunder { color: var(--red); }
+.lpm-move.cur.m-blunder, .lpm-move.cur.m-mistake, .lpm-move.cur.m-inacc, .lpm-move.cur.m-best { color: #10140c; }
+
 /* ---------- swiss ---------- */
 .format-warning {
   background: rgba(224, 180, 82, 0.1); border: 1px solid var(--gold); border-radius: 8px;
