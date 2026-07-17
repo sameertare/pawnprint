@@ -205,6 +205,7 @@ function render() {
   renderMoveList();
   updateNav();
   renderEvalGraph();
+  updatePgnOutput();
   void debouncedUpdateCandidates();
 }
 
@@ -213,6 +214,19 @@ function renderEvalGraph() {
   if (line.length < 2) { el.hidden = true; return; }
   el.hidden = false;
   mountInteractiveSparkline(el, evalsW, view, (i) => goto(i));
+}
+
+function updatePgnOutput() {
+  const textarea = $('#live-pgn-output') as HTMLTextAreaElement;
+  if (mode !== 'live' || line.length < 2) {
+    textarea.value = '';
+    return;
+  }
+  const pgn = buildPgnFromLine({
+    white: curWhite, black: curBlack, event: curEvent, result: curResult,
+    line, evalsW, bestU,
+  });
+  textarea.value = pgn;
 }
 
 function renderAssess(c: Chess, fen: string) {
