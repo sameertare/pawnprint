@@ -127,6 +127,14 @@
               </label>
               <button id="play-start-btn" class="btn btn-primary">▶ Start game</button>
             </div>
+            <div class="play-or">— or continue from a lichess game —</div>
+            <label class="stack">Take over a live or finished lichess game
+              <input type="text" id="play-lichess-input" class="text-input" placeholder="Paste a lichess game URL/ID (or study link / FEN)" />
+            </label>
+            <div class="config-row">
+              <button id="play-load-lichess-btn" class="btn btn-primary">📥 Load &amp; play from here</button>
+            </div>
+            <p class="hint">Loads the game up to its latest move, then hands the position to you — you play your chosen colour from there and the engine replies. Great for taking over a live game and seeing how you'd continue.</p>
             <div class="btn-row">
               <button id="play-undo-btn" class="btn btn-ghost" hidden>↶ Take back both</button>
               <button id="play-reset-btn" class="btn btn-ghost" hidden>🔄 Reset</button>

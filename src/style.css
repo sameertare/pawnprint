@@ -301,6 +301,10 @@ a { color: var(--blue); }
 }
 .text-area { resize: vertical; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.play-or {
+  text-align: center; color: var(--text-dim); font-size: 0.82rem;
+  margin: 14px 0 10px; text-transform: uppercase; letter-spacing: 0.04em;
+}
 
 /* ---------- board ---------- */
 .board-wrap { position: relative; width: 100%; aspect-ratio: 1; }

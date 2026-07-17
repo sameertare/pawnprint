@@ -464,9 +464,11 @@ async function playEngineMove() {
       truncateAfter(view);
       appendNode(m.after, uci);
       view = line.length - 1;
-      render();
+      render(); // sets "Checkmate!"/"Draw!" etc. when the engine's move ends the game
       void pump();
-      status.textContent = '';
+      // If the game continues, it's the user's turn again — render() leaves a generic status, so
+      // make it explicit. Game-over messages set by render() are left untouched.
+      if (!new Chess(line[view].fen).isGameOver()) status.textContent = 'Your turn';
     }
   } catch (e) {
     status.textContent = 'Engine error.';
@@ -982,6 +984,71 @@ $('#play-reset-btn').addEventListener('click', () => {
   if (playUserColor === 'b') {
     void playEngineMove();
   }
+});
+
+/** Fetch a lichess game/study/FEN and hand its latest position to Play-vs-Engine mode, so the
+ *  user can take over and continue playing against the engine from that point. */
+async function loadLichessGameForPlay(raw: string) {
+  const status = $('#play-status');
+  const parsed = classifyLichessInput(raw);
+  if (!parsed) {
+    status.textContent = 'Enter a lichess game URL/ID, a study link, or a FEN.';
+    return;
+  }
+
+  let built: BuiltLine | null = null;
+  status.textContent = 'Loading from lichess…';
+  try {
+    if (parsed.kind === 'game') {
+      const r = await fetch(`https://lichess.org/game/export/${parsed.id}?clocks=false&evals=false&literate=false`, {
+        headers: { Accept: 'application/x-chess-pgn' },
+      });
+      if (!r.ok) { status.textContent = `Lichess returned ${r.status} — game not found or not viewable.`; return; }
+      built = buildLineFromPgn(await r.text());
+    } else if (parsed.kind === 'study') {
+      const url = parsed.chapterId
+        ? `https://lichess.org/study/${parsed.studyId}/${parsed.chapterId}.pgn`
+        : `https://lichess.org/study/${parsed.studyId}.pgn`;
+      const r = await fetch(url, { headers: { Accept: 'application/x-chess-pgn' } });
+      if (!r.ok) { status.textContent = `Lichess returned ${r.status} — study not found or not public.`; return; }
+      const chunks = splitPgn(await r.text());
+      built = chunks.length ? buildLineFromPgn(chunks[0]) : null;
+    } else {
+      // A bare FEN / analysis-board link — just play from that single position.
+      try { new Chess(parsed.fen); } catch { status.textContent = 'Invalid FEN.'; return; }
+      built = { line: [{ fen: parsed.fen, lm: null, san: null }] };
+    }
+  } catch {
+    status.textContent = 'Could not reach lichess.';
+    return;
+  }
+
+  if (!built || built.line.length === 0) { status.textContent = 'Could not read a position from that.'; return; }
+
+  // Adopt the loaded line and jump to its latest position — that's where the user takes over.
+  line = built.line;
+  evalsW = line.map(() => null); bestU = line.map(() => null); mateN = line.map(() => null);
+  view = line.length - 1;
+  curWhite = built.white; curBlack = built.black; curEvent = built.event; curResult = built.result;
+
+  playUserColor = ($('#play-color') as HTMLSelectElement).value as 'w' | 'b';
+  playEngineThinking = false;
+  ($('#play-undo-btn') as HTMLElement).hidden = false;
+  ($('#play-reset-btn') as HTMLElement).hidden = false;
+  render();
+  void pump();
+
+  // If it's the engine's turn at the loaded position, let it move; otherwise it's the user's turn.
+  const stm = line[view].fen.split(' ')[1] as 'w' | 'b';
+  if (stm !== playUserColor) {
+    void playEngineMove();
+  } else {
+    status.textContent = `Loaded ${line.length - 1} move(s). Your turn (${playUserColor === 'w' ? 'White' : 'Black'}) — play on!`;
+  }
+}
+
+$('#play-load-lichess-btn').addEventListener('click', () => {
+  void loadLichessGameForPlay(($('#play-lichess-input') as HTMLInputElement).value);
 });
 
 document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
