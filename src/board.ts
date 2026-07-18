@@ -1,12 +1,8 @@
 /** Presentation-only chessboard: renders from FEN, supports highlights, a move arrow, and click callbacks. */
 
-// The uppercase (white) Unicode chess glyphs (♔♕♖♗♘♙) render as hollow outlines in most fonts,
-// while the lowercase (black) ones (♚♛♜♝♞♟) render solid/filled — a font quirk, not a color
-// choice. Using the same filled glyph shape for both and telling them apart purely by CSS color
-// (like a real board) avoids white pieces looking hollow regardless of fill color.
-const GLYPHS: Record<string, string> = {
-  p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚',
-};
+// Piece art: lichess's "cburnett" set (Colin M.L. Burnett, GPLv2+ — see public/pieces/cburnett).
+// Base-path aware so it resolves correctly under a subpath (e.g. GitHub Pages project sites).
+const PIECE_URL = (code: string) => `${import.meta.env.BASE_URL}pieces/cburnett/${code}.svg`;
 
 export type Square = string; // 'e4'
 
@@ -101,8 +97,9 @@ export class Board {
         const coord =
           (fi === 0 ? `<span class="coord rank">${ranks[ri]}</span>` : '') +
           (ri === 7 ? `<span class="coord file">${files[fi]}</span>` : '');
+        const code = piece ? (piece === piece.toUpperCase() ? 'w' : 'b') + piece.toUpperCase() : '';
         html += `<div class="${cls.join(' ')}" data-sq="${sq}">${coord}${
-          piece ? `<span class="pc ${piece === piece.toUpperCase() ? 'white' : 'black'}">${GLYPHS[piece.toLowerCase()]}</span>` : ''
+          piece ? `<img class="pc" src="${PIECE_URL(code)}" alt="" draggable="false" />` : ''
         }</div>`;
       }
     }
