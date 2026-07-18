@@ -41,6 +41,17 @@ export class Board {
   setFen(fen: string) { this.fen = fen; this.render(); }
   getSelected() { return this.selected; }
   setSelected(sq: Square | null) { this.selected = sq; this.render(); }
+  /** Briefly flashes a square red — the only feedback a click-to-move UI gives for an illegal
+   *  destination, since otherwise the click just silently does nothing and can read as the whole
+   *  board being unresponsive/stuck rather than "that move isn't legal, try another square." */
+  flashIllegal(sq: Square) {
+    const el = this.root.querySelector<HTMLElement>(`[data-sq="${sq}"]`);
+    if (!el) return;
+    el.classList.remove('illegal'); // restart the animation if it's already mid-flash
+    void el.offsetWidth; // force a reflow so re-adding the class below retriggers the CSS animation
+    el.classList.add('illegal');
+    setTimeout(() => el.classList.remove('illegal'), 400);
+  }
   setHighlights(sqs: Square[]) { this.highlights = new Set(sqs); this.render(); }
   setLastMove(m: [Square, Square] | null) { this.lastMove = m; this.render(); }
   /** Single best-move arrow (rank 1). Convenience wrapper over setArrows. */

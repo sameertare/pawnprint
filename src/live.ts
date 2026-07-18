@@ -607,6 +607,11 @@ board.onSquareClick = (sq) => {
       if (mode === 'play') void playEngineMove(); // no-op unless it's now the engine's turn
       return;
     }
+    // Not a legal destination for the selected piece. If it's one of the player's own other
+    // pieces, this is just "change my mind" reselection — not a mistake, no flash. Otherwise it
+    // was a genuine illegal-move attempt (blocked path, pin, moving into check, etc.), and without
+    // any feedback that silently does nothing, which reads as the whole board being unresponsive.
+    if (!(piece && piece.color === c.turn())) board.flashIllegal(sq);
   }
   if (piece && piece.color === c.turn()) board.setSelected(sq);
   else board.setSelected(null);

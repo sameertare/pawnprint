@@ -649,6 +649,10 @@ drillBoard.onSquareClick = (sq) => {
       answerDrill(m.san);
       return;
     }
+    // Not a legal chess move (distinct from a legal move that's just not in the repertoire, which
+    // answerDrill already handles as a normal "incorrect" answer) — flash it so a mis-click reads
+    // as "try again" rather than the board silently doing nothing.
+    if (!(piece && piece.color === c.turn())) drillBoard.flashIllegal(sq);
   }
   if (piece && piece.color === c.turn()) drillBoard.setSelected(sq);
   else drillBoard.setSelected(null);
