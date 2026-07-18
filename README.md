@@ -146,7 +146,7 @@ samples/          example PGNs (bundled "try the sample" button)
 - Analysis of the user's moves only — the identified player is auto-detected from the PGN and selectable.
 - All processing is local; no game data leaves your machine.
 - **Light/dark theme** — every page has a toggle (☀️/🌙) in the top nav. The choice is saved to `localStorage` and applied on every page via a small inline script in `<head>`, so it survives navigation without a flash of the wrong theme. Dark is the default. `src/theme.ts` wires up the toggle button on every page.
-- **Board & pieces** — every interactive board (Live & Engine, Opening Explorer) uses a lichess-green square theme and the "cburnett" piece set by Colin M.L. Burnett ([GPLv2+](https://www.gnu.org/licenses/gpl-2.0.txt)), bundled under `public/pieces/cburnett/`.
+- **Board & pieces** — every interactive board (Live & Engine, Opening Explorer) uses a lichess-blue square theme and the "chessnut" piece set by Alexis Luengas ([Apache 2.0](https://github.com/LexLuengas/chessnut-pieces/blob/master/LICENSE.txt)), bundled under `public/pieces/chessnut/`.
 
 ## Install as an app / offline use
 

@@ -1,8 +1,8 @@
 /** Presentation-only chessboard: renders from FEN, supports highlights, a move arrow, and click callbacks. */
 
-// Piece art: lichess's "cburnett" set (Colin M.L. Burnett, GPLv2+ — see public/pieces/cburnett).
+// Piece art: lichess's "chessnut" set (Alexis Luengas, Apache 2.0 — see public/pieces/chessnut).
 // Base-path aware so it resolves correctly under a subpath (e.g. GitHub Pages project sites).
-const PIECE_URL = (code: string) => `${import.meta.env.BASE_URL}pieces/cburnett/${code}.svg`;
+const PIECE_URL = (code: string) => `${import.meta.env.BASE_URL}pieces/chessnut/${code}.svg`;
 
 export type Square = string; // 'e4'
 
