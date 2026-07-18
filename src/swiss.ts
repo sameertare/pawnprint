@@ -643,7 +643,9 @@ async function handleResultsPhoto(file: File, roundNo: number) {
   if (!t || !round) { ocrBusy = false; return; }
 
   const statusSel = `.ocr-status[data-round="${roundNo}"]`;
-  const setStatus = (msg: string) => { const el = document.querySelector(statusSel) as HTMLElement | null; if (el) el.textContent = msg; };
+  // innerHTML (not textContent) so a failed match can include a collapsible preview of the raw OCR
+  // text below the message — everything passed in here is either authored by us or escaped.
+  const setStatus = (html: string) => { const el = document.querySelector(statusSel) as HTMLElement | null; if (el) el.innerHTML = html; };
   setStatus('Reading image… 0%');
 
   try {
@@ -665,12 +667,17 @@ async function handleResultsPhoto(file: File, roundNo: number) {
     renderRounds(t); // may remove the OCR panel entirely if this filled in the round's last result
     renderPrintArea();
     const remaining = matches.length - filled;
+    // Shown collapsed regardless of outcome — lets the TD (or a bug report) see exactly what OCR
+    // pulled off the photo instead of the match/no-match result being a black box.
+    const rawPreview = lines.length
+      ? `<details class="ocr-raw-toggle"><summary>Show text read from photo (${lines.length} line${lines.length === 1 ? '' : 's'})</summary><pre class="ocr-raw-text">${esc(lines.map((l) => l.text).join('\n'))}</pre></details>`
+      : '';
     setStatus(
-      filled
+      (filled
         ? `✓ Filled in ${filled} of ${matches.length} result${matches.length === 1 ? '' : 's'} from the photo` +
           (remaining ? ` — ${remaining} more need to be entered by hand.` : '.') +
           ' Double-check them before pairing the next round.'
-        : `Couldn't confidently match any results from that photo — please enter them by hand.`
+        : `Couldn't confidently match any results from that photo — please enter them by hand.`) + rawPreview
     );
   } catch (e) {
     // Logged so a real failure (as opposed to the expected "couldn't decode this format" /

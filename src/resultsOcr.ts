@@ -173,6 +173,40 @@ function extractResultToken(lineText: string): GameResult {
   return null;
 }
 
+/** Many results sheets are tables — board/white/black/result each their own cell — and Tesseract's
+ *  line detection follows visual layout, so each cell comes back as its own separate OcrLine rather
+ *  than one line containing a full row. Matching against raw lines would then never see both names
+ *  and a result together. This clusters lines whose vertical centers land close together (i.e. sit
+ *  in the same table row) and joins them left-to-right into one row of text, so a row split across
+ *  cells reads the same as a results sheet that already put a whole pairing on one line. */
+function groupLinesIntoRows(lines: OcrLine[]): OcrLine[] {
+  if (!lines.length) return [];
+  const heights = lines.map((l) => l.y1 - l.y0).sort((a, b) => a - b);
+  const tolerance = (heights[Math.floor(heights.length / 2)] || 20) * 0.6;
+
+  const sorted = [...lines].sort((a, b) => (a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2);
+  const rows: OcrLine[][] = [];
+  for (const line of sorted) {
+    const centerY = (line.y0 + line.y1) / 2;
+    const row = rows.find((r) => {
+      const rowCenterY = r.reduce((sum, l) => sum + (l.y0 + l.y1) / 2, 0) / r.length;
+      return Math.abs(rowCenterY - centerY) <= tolerance;
+    });
+    if (row) row.push(line);
+    else rows.push([line]);
+  }
+  return rows.map((row) => {
+    const sortedRow = [...row].sort((a, b) => a.x0 - b.x0);
+    return {
+      text: sortedRow.map((l) => l.text).join('  '),
+      x0: Math.min(...row.map((l) => l.x0)),
+      y0: Math.min(...row.map((l) => l.y0)),
+      x1: Math.max(...row.map((l) => l.x1)),
+      y1: Math.max(...row.map((l) => l.y1)),
+    };
+  });
+}
+
 export interface OcrResultMatch {
   board: number;
   result: GameResult;
@@ -180,26 +214,27 @@ export interface OcrResultMatch {
   confidence: 'matched' | 'unmatched';
 }
 
-/** For each pairing the app already generated for the round being scored, looks for the OCR line
- *  that best names both players, then pulls a result out of that line. Pairings the photo doesn't
+/** For each pairing the app already generated for the round being scored, looks for the OCR row
+ *  that best names both players, then pulls a result out of that row. Pairings the photo doesn't
  *  clearly cover come back unmatched — left for the TD to fill in by hand, same as always. */
 export function matchResultsToPairings(
   lines: OcrLine[],
   pairings: { board: number; whiteName: string; blackName: string }[]
 ): OcrResultMatch[] {
+  const rows = groupLinesIntoRows(lines);
   return pairings.map(({ board, whiteName, blackName }) => {
-    let bestLine: OcrLine | null = null;
+    let bestRow: OcrLine | null = null;
     let bestScore = 0;
-    for (const line of lines) {
-      const wScore = nameLineScore(whiteName, line.text);
-      const bScore = nameLineScore(blackName, line.text);
+    for (const row of rows) {
+      const wScore = nameLineScore(whiteName, row.text);
+      const bScore = nameLineScore(blackName, row.text);
       if (wScore < MIN_LINE_SCORE || bScore < MIN_LINE_SCORE) continue;
       const combined = wScore + bScore;
-      if (combined > bestScore) { bestScore = combined; bestLine = line; }
+      if (combined > bestScore) { bestScore = combined; bestRow = row; }
     }
-    if (!bestLine) return { board, result: null, matchedLine: null, confidence: 'unmatched' };
-    const result = extractResultToken(bestLine.text);
-    if (!result) return { board, result: null, matchedLine: bestLine.text, confidence: 'unmatched' };
-    return { board, result, matchedLine: bestLine.text, confidence: 'matched' };
+    if (!bestRow) return { board, result: null, matchedLine: null, confidence: 'unmatched' };
+    const result = extractResultToken(bestRow.text);
+    if (!result) return { board, result: null, matchedLine: bestRow.text, confidence: 'unmatched' };
+    return { board, result, matchedLine: bestRow.text, confidence: 'matched' };
   });
 }
