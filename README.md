@@ -1,15 +1,16 @@
 # ♖ OpenFile
 
-A local-first chess toolkit with **seven tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
+A local-first chess toolkit with **eight tools**, each its own single-page app, reachable from a hub landing page. Everything runs in the browser: **Stockfish 18** (lite) as a WASM worker, live games streamed straight from the lichess public API, and all analysis client-side — your games never leave your machine. An optional Node/Express backend adds server-side report storage, but the whole app also runs as a pure static site (e.g. GitHub Pages).
 
 | Page | Tool | What it does |
 |---|---|---|
-| `index.html` | **Hub** | Landing page linking to the seven tools |
+| `index.html` | **Hub** | Landing page linking to the eight tools |
 | `analyze.html` | **Performance Analysis** | Deep performance report from chess.com / lichess PGNs |
-| `live.html` | **Live & Engine** | Watch a live lichess game with move feedback; best-move suggestion from any position |
+| `live.html` | **Live & Engine** | Watch a live lichess game with move feedback; best-move suggestion from any position; play vs. Stockfish |
 | `swiss.html` | **Swiss Pairings** | Run a full Swiss tournament from a roster |
-| `opening-explorer.html` | **Opening Explorer** | Branching opening tree from your own PGNs |
+| `opening-explorer.html` | **Opening Explorer** | Branching opening tree from your own PGNs; opponent scouting report |
 | `compare-reports.html` | **Compare Reports** | Side-by-side metric delta between two saved Performance Analysis reports |
+| `roster.html` | **Coach Roster** | Track several players' saved reports at once as summary cards |
 | `rating.html` | **USCF Rating Estimator** | Estimate a new US Chess rating after an event |
 | `fide-rating.html` | **FIDE Rating Estimator** | Estimate a new FIDE Standard rating after an event |
 
@@ -41,6 +42,7 @@ The player the report is for is **auto-detected**, not picked from a dropdown: w
 ## Save & track over time
 
 - **Download report.md** — a self-contained Markdown file. Human-readable tables *and* an embedded machine-readable data block.
+- **Export as PDF** — the **🖨️ Export as PDF** button opens the browser's native print dialog (pick "Save as PDF" as the destination) with a dedicated print stylesheet, so the full report prints cleanly regardless of dark/light theme — no bundled PDF library.
 - **Re-open it later** — drop the `.md` back in **together with new PGN files**. Already-analyzed games are kept as-is; only the new games are analyzed, and the report accumulates a session history.
 - **Save on / load from server** — optional server-side storage so reports persist between machines.
 - **Multiple files at once** — drop any number of `.pgn` files (and a report `.md`) in a single input.
@@ -176,6 +178,8 @@ Two modes, one board (Stockfish 18 runs locally in the browser). Layout follows 
 
 **Top candidate moves (both modes)** — the currently viewed position always shows the top 3 engine moves (Stockfish's MultiPV), each with its evaluation and a short continuation, drawn on the board as three ranked arrows (green/gold/blue, thickest and brightest for the best move) — useful for seeing what else was worth considering, not just the single best line.
 
+**Tablebase verdict** — for any position with 7 or fewer pieces, a small panel queries lichess's free public Syzygy tablebase (`tablebase.lichess.ovh`) for the exact win/draw/loss result and distance-to-zeroing, alongside Stockfish's own evaluation. Works across Any Position, Play vs Engine, and Live game modes; silently hides itself above 7 pieces or if the request fails (offline, etc.) — it's a nice-to-have overlay, not a dependency.
+
 **Eval graph** — once a loaded game has at least two evaluated positions, a sparkline appears under the eval bar tracing the evaluation (white's perspective) across the whole game so far; click anywhere on it to jump straight to that ply. It fills in progressively as background evaluation catches up, and works in both modes. Opening a game from Analyze's games list (see below) via its ▶ link deep-links here and drops you straight onto this view.
 
 **Export PGN** — the **⬇ PGN** button downloads the currently loaded line as a standard PGN, with the engine eval baked in as a `[%eval ...]` comment on every position that's been evaluated so far, plus a note wherever the engine's suggested best move differs from what was actually played — handy for a coach who wants to review offline without the app.
@@ -227,6 +231,7 @@ Turns your own PGNs into a branching opening tree — like [openingtree.com](htt
 - **Browsing:** a board (reusing the same `Board` component as Live & Engine) plus a clickable breadcrumb and a move-list table sorted by frequency, each row showing games played, score %, and a win/draw/loss bar. Click a move to drill in; **Back**/**Start**/flip to navigate. Switching profile tabs resets the browsing position back to the start.
 - **Filters:** color (White/Black — rebuilds the tree and flips the board), and a minimum-games threshold to hide rarely-played branches.
 - **Games reaching this position:** every individual game behind the current node — opponent, result, date, a link to the game if the PGN had one, and an expandable full move list. Paginated (50 / 100 / 250 / All per page, with Prev/Next) rather than capped, so a popular position with hundreds of games is still fully browsable, not just the first 50. The page resets to 1 whenever you move to a different position in the tree, but stays put if you're just changing the page size or paging through the current one. The same "Show" dropdown also has a **⬇ Download all as PGN** option — every game reaching that position (not just the current page), bundled into one multi-game PGN file with headers reconstructed from what the tree tracks (opponent, date, result relative to you, and a link back to the source game where one exists).
+- **Opponent scouting report:** shown only in the 🎯 Opponent Prep tab once games are loaded — overall W-D-L/score, by-color breakdown, results by time control, and most-played/best-scoring/worst-scoring openings. Deliberately skips per-move engine analysis (too slow across a whole account's games); reuses the same `src/aggregate.ts` openings/time-control logic Performance Analysis uses, just without the sections that need engine evals (phases, tactics, patterns, recommendations).
 
 Not in v1 (noted as future work): variant support and master-game comparison — real openingtree.com features, scoped out to keep this focused. (The Lichess masters-database comparison was tried and removed — see git history — after their public API proved unreliable.)
 
@@ -246,7 +251,20 @@ Pure comparison logic lives in `src/reportCompare.ts` (no DOM), separate from th
 
 ---
 
-## Tool 6 — USCF Rating Estimator (`/rating.html`)
+## Tool 6 — Coach Roster (`/roster.html`)
+
+Track several players at once instead of opening one Performance Analysis report at a time — built for a coach or tournament director following multiple students.
+
+- **Input:** drop any number of saved `report.md` files at once, or add more later. One card per player — dropping a newer report for a player already in the roster replaces their card rather than adding a duplicate, keyed by username (case-insensitive) and compared by `meta.updatedAt`.
+- **Server option:** "📂 Load all from server" fetches every report saved via Performance Analysis's "💾 Save on server" (`GET /api/reports`, then each report's markdown), so a coach using the optional backend doesn't need to re-upload files by hand.
+- **Cards show:** games, score %, accuracy, and blunder count, plus the player's weakest opening (2+ games) and their top training-recommendation area, when the underlying report has that data (both need an engine-analyzed report — a report loaded/re-analyzed with "No engine" won't have accuracy or recommendations to show).
+- **Sort by:** score % (either direction), accuracy, name, or last updated — defaults to lowest score first, surfacing whoever most needs attention.
+
+A malformed or unexpectedly old-schema `report.md` is skipped with an inline error rather than silently aborting the whole batch load. Reuses `src/markdown.ts`'s `parseMarkdownReport` and `src/aggregate.ts`'s `aggregate()` — the exact same parsing/aggregation Performance Analysis and Compare Reports already use.
+
+---
+
+## Tool 7 — USCF Rating Estimator (`/rating.html`)
 
 Estimate a new US Chess (USCF) rating after an event, using the published rating formula.
 
@@ -259,7 +277,7 @@ This is an **unofficial estimate**, clearly labeled as such in the tool — US C
 
 ---
 
-## Tool 7 — FIDE Rating Estimator (`/fide-rating.html`)
+## Tool 8 — FIDE Rating Estimator (`/fide-rating.html`)
 
 Estimate a new FIDE **Standard** rating after an event (Rapid/Blitz use separate rating pools and aren't covered).
 

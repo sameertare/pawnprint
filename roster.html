@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Coach Roster — OpenFile</title>
+    <link rel="icon" href="/logo-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#14181f" />
+      <script>try{if(localStorage.getItem("openfile-theme")==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}</script>
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="brand" href="index.html"><img src="/logo-icon.png" alt="" class="brand-logo" width="24" height="24">OpenFile</a>
+      <div class="navlinks">
+        <a href="index.html">🏠 Home</a>
+        <a href="analyze.html">Performance Analysis</a>
+        <a href="live.html">Live &amp; Engine</a>
+        <a href="swiss.html">Swiss Pairings</a>
+        <a href="opening-explorer.html">Opening Explorer</a>
+        <a href="compare-reports.html">Compare Reports</a>
+        <a href="roster.html" class="active">Coach Roster</a>
+        <a href="rating.html">USCF Rating</a>
+        <a href="fide-rating.html">FIDE Rating</a>
+        <a href="about.html">About</a>
+      </div>
+          <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark theme">☀️</button>
+    </nav>
+    <div id="app">
+      <header class="app-header">
+        <h1>🗂 Coach Roster</h1>
+        <p class="tagline">Track several players' Performance Analysis reports in one dashboard, instead of opening one report at a time. Drop in every saved <code>report.md</code> you have — a card per player, most recent report only.</p>
+      </header>
+
+      <section class="card" id="load-card">
+        <h2><span class="step">1</span> Load your players' reports</h2>
+        <div id="dropzone" class="dropzone">
+          <p><strong>Drop report.md files here</strong> (any number, any players) — or</p>
+          <label class="btn btn-primary" for="file-input">Choose files</label>
+          <input type="file" id="file-input" accept=".md" multiple hidden />
+          <p class="hint">Drop the whole batch at once, or add more later — one card per player, keeping only their most recently updated report.</p>
+        </div>
+        <div id="file-summary" class="file-summary"></div>
+        <div id="load-error" class="neg" style="margin-top:10px;"></div>
+
+        <div class="bulk-fetch">
+          <p class="hint">…or pull in everything already saved on the server (if you've been using "💾 Save on server" from Performance Analysis):</p>
+          <button id="load-server-all" class="btn">📂 Load all from server</button>
+          <span id="server-status" class="hint"></span>
+        </div>
+      </section>
+
+      <section id="results" hidden>
+        <div class="roster-toolbar">
+          <div id="roster-count" class="hint"></div>
+          <label class="stack" style="max-width:220px;">Sort by
+            <select id="sort-select">
+              <option value="score-asc">Score % (lowest first)</option>
+              <option value="score-desc">Score % (highest first)</option>
+              <option value="accuracy-asc">Accuracy (lowest first)</option>
+              <option value="name">Name (A–Z)</option>
+              <option value="updated">Last updated (newest first)</option>
+            </select>
+          </label>
+          <button id="clear-roster" class="btn btn-ghost">Clear roster</button>
+        </div>
+        <div id="roster-grid" class="roster-grid"></div>
+      </section>
+
+      <footer class="app-footer">
+        OpenFile · runs entirely in your browser · reports never leave your machine unless you use the optional server save
+      </footer>
+    </div>
+    <script type="module" src="/src/roster.ts"></script>
+  </body>
+</html>

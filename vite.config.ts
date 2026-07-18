@@ -21,6 +21,7 @@ export default defineConfig({
         swiss: page('./swiss.html'),
         openingExplorer: page('./opening-explorer.html'),
         compareReports: page('./compare-reports.html'),
+        roster: page('./roster.html'),
         rating: page('./rating.html'),
         fideRating: page('./fide-rating.html'),
         about: page('./about.html'),

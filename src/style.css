@@ -229,6 +229,25 @@ a { color: var(--blue); }
 .hub-card p { color: var(--text-dim); font-size: 0.92rem; flex: 1; }
 .hub-go { color: var(--accent); font-weight: 600; margin-top: 12px; }
 
+/* ---------- coach roster ---------- */
+.roster-toolbar {
+  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.roster-toolbar #roster-count { flex: 1; font-size: 0.95rem; }
+.roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.roster-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px;
+}
+.roster-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.roster-card-head h3 { margin: 0; font-size: 1.05rem; }
+.roster-card-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+.rstat { text-align: center; background: var(--bg-inset); border-radius: 8px; padding: 8px 4px; }
+.rstat .big { display: block; font-size: 1.1rem; font-weight: 700; }
+.rstat .label { color: var(--text-dim); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.roster-note { font-size: 0.85rem; margin: 6px 0 0; color: var(--text-dim); }
+.roster-note b { color: var(--text); }
+
 /* ---------- tabs ---------- */
 .tabbar { display: flex; gap: 8px; margin-bottom: 18px; }
 .tab {
