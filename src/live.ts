@@ -523,6 +523,15 @@ let playMoveToken = 0;
 function invalidatePlayEngineMove() {
   playMoveToken++;
   playEngineThinking = false;
+  // The token above stops a stale search's RESULT from being applied, but the search itself (if
+  // one is actively running — e.g. pump()'s background eval of the position the user just moved
+  // away from) would otherwise keep occupying the engine's single serialized queue until it
+  // finishes on its own. Since evaluate()/evaluateMultiPv() only resolve on a 'bestmove' message,
+  // and stop() makes Stockfish emit one almost immediately, this frees the queue for the engine's
+  // real reply right away instead of leaving it stuck behind a search nobody needs anymore —
+  // which, at higher engine strength, could stall the engine's actual move for many seconds and
+  // read as the game being stuck.
+  engine?.stop();
 }
 
 async function playEngineMove() {
@@ -589,6 +598,10 @@ board.onSquareClick = (sq) => {
       appendNode(m.after, sel + sq + (m.promotion ? 'q' : ''));
       view = line.length - 1;
       $('#engine-out').innerHTML = '';
+      // In Play mode, pump() may still be mid-search evaluating the position the user is about to
+      // move away from (a background eval shown during their own turn). Cancel it now so it can't
+      // occupy the engine's queue ahead of the engine's actual reply below.
+      if (mode === 'play') engine?.stop();
       render();
       void pump();
       if (mode === 'play') void playEngineMove(); // no-op unless it's now the engine's turn
