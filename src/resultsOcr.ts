@@ -7,6 +7,7 @@
  * its own, so it's testable independent of the OCR step — src/swiss.ts wires the two together.
  */
 import type { GameResult } from './swissEngine';
+import type Tesseract from 'tesseract.js';
 
 export interface OcrLine {
   text: string;
@@ -16,7 +17,11 @@ export interface OcrLine {
   y1: number;
 }
 
-const MAX_DIMENSION = 2200; // caps OCR time/memory on a full-resolution phone photo (often 3000-4000px)
+// Caps OCR time/memory on an extreme-resolution photo while otherwise leaving full-res phone
+// photos (typically 3000-4000px) untouched — a dense multi-column pairing sheet with 40+ rows of
+// small print needs most of that resolution to stay legible; the previous, much lower cap here was
+// throwing away exactly the detail OCR needed for that case.
+const MAX_DIMENSION = 3600;
 
 /** iPhones default to HEIC/HEIF for photos, which — unlike JPEG/PNG — has no built-in decode
  *  support in any browser except Safari (no <img>, canvas, or createImageBitmap support). Since
@@ -86,6 +91,14 @@ export async function ocrLines(file: File, onProgress?: (pct: number) => void): 
     },
   });
   try {
+    // Tesseract's default page-segmentation mode tries to infer paragraph/column layout, which on
+    // a dense multi-column table (gridlines, two side-by-side board blocks) tends to stitch text
+    // from unrelated cells onto the same "line" and read gridlines as characters — exactly the kind
+    // of garbled output a results-sheet photo produces. SPARSE_TEXT ('11') skips layout inference
+    // and just finds text wherever it is, one line per text run, with no assumed reading order —
+    // reading order doesn't matter here since matchResultsToPairings re-clusters lines into rows by
+    // bounding-box position anyway.
+    await worker.setParameters({ tessedit_pageseg_mode: '11' as Tesseract.PSM });
     // `blocks` (which nests down to paragraphs/lines/words) is opt-in — recognize() only returns
     // flat text by default, which would leave every line's bounding box unavailable for matching.
     const { data } = await worker.recognize(image, {}, { blocks: true });
