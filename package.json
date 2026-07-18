@@ -13,8 +13,7 @@
   "dependencies": {
     "chess.js": "^1.4.0",
     "express": "^4.21.2",
-    "stockfish": "^18.0.8",
-    "tesseract.js": "^7.0.0"
+    "stockfish": "^18.0.8"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
