@@ -8,6 +8,7 @@ import {
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
 import { registerServiceWorker } from './pwa';
 import { initTheme } from './theme';
+import { ocrLines, matchResultsToPairings } from './resultsOcr';
 
 registerServiceWorker();
 initTheme();
@@ -628,6 +629,56 @@ function roundMethodologyHtml(t: Tournament, roundNo: number): string {
   </details>`;
 }
 
+// ---------- read results from a photo (OCR) ----------
+// Guards against a second photo being processed while one is already running — Tesseract's worker
+// isn't set up to run two recognitions concurrently in a useful way, and overlapping runs could
+// apply results from the wrong round if the user is impatient and re-selects a file mid-read.
+let ocrBusy = false;
+
+async function handleResultsPhoto(file: File, roundNo: number) {
+  if (ocrBusy) return;
+  ocrBusy = true;
+  const t = cur();
+  const round = t?.rounds.find((r) => r.number === roundNo);
+  if (!t || !round) { ocrBusy = false; return; }
+
+  const statusSel = `.ocr-status[data-round="${roundNo}"]`;
+  const setStatus = (msg: string) => { const el = document.querySelector(statusSel) as HTMLElement | null; if (el) el.textContent = msg; };
+  setStatus('Reading image… 0%');
+
+  try {
+    const lines = await ocrLines(file, (pct) => setStatus(`Reading image… ${pct}%`));
+    // Only the boards that don't have a result yet — never overwrite one the TD already entered
+    // (by hand or from an earlier photo) just because this photo also happens to name that pairing.
+    const pairings = round.pairings
+      .filter((p) => p.byeId == null && p.result == null)
+      .map((p) => ({ board: p.board, whiteName: nameOf(t, p.whiteId), blackName: nameOf(t, p.blackId) }));
+    const matches = matchResultsToPairings(lines, pairings);
+    let filled = 0;
+    for (const m of matches) {
+      if (m.result) { setResult(t, roundNo, m.board, m.result); filled++; }
+    }
+    save();
+    renderStandings(t);
+    renderWallChart(t);
+    renderSectionTabs();
+    renderRounds(t); // may remove the OCR panel entirely if this filled in the round's last result
+    renderPrintArea();
+    const remaining = matches.length - filled;
+    setStatus(
+      filled
+        ? `✓ Filled in ${filled} of ${matches.length} result${matches.length === 1 ? '' : 's'} from the photo` +
+          (remaining ? ` — ${remaining} more need to be entered by hand.` : '.') +
+          ' Double-check them before pairing the next round.'
+        : `Couldn't confidently match any results from that photo — please enter them by hand.`
+    );
+  } catch {
+    setStatus('Could not read that image — please enter results by hand.');
+  } finally {
+    ocrBusy = false;
+  }
+}
+
 function renderRounds(t: Tournament) {
   const el = $('#rounds');
   if (!t.rounds.length) { el.innerHTML = `<p class="hint">No rounds yet — click “Pair next round”.</p>`; return; }
@@ -737,8 +788,20 @@ function renderRounds(t: Tournament) {
         ? `<details class="round-advanced"><summary>⚙ Fix a mistake in this round</summary>${advancedBody}</details>`
         : '';
 
+      // Reading results from a photo only makes sense for the round currently being scored — once
+      // it's complete there's nothing left to fill in, and it's not offered for earlier rounds so
+      // there's never any ambiguity about which round a photo's results apply to.
+      const ocrPanel = isLatestRound && !round.complete
+        ? `<div class="ocr-results-panel">
+            <input type="file" accept="image/*" class="ocr-file-input" data-round="${round.number}" id="ocr-file-${round.number}" hidden />
+            <label for="ocr-file-${round.number}" class="btn btn-ghost btn-sm">📷 Read results from photo</label>
+            <span class="ocr-status hint" data-round="${round.number}"></span>
+          </div>`
+        : '';
+
       return `<div class="round-block">
         <h3>Round ${round.number} ${round.complete ? '<span class="pos">✓ complete</span>' : '<span class="hint">in progress</span>'}</h3>
+        ${ocrPanel}
         <table><thead><tr><th class="num">Bd</th><th>White</th><th>Black</th><th>Result</th></tr></thead>
         <tbody>${rows}</tbody></table>
         ${roundMethodologyHtml(t, round.number)}
@@ -759,6 +822,14 @@ function renderRounds(t: Tournament) {
       renderSectionTabs();
       renderRounds(t2);
       renderPrintArea();
+    });
+  });
+
+  el.querySelectorAll<HTMLInputElement>('.ocr-file-input').forEach((input) => {
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      input.value = ''; // reset so re-selecting the same file (e.g. after a bad read) re-fires change
+      if (file) void handleResultsPhoto(file, parseInt(input.dataset.round!, 10));
     });
   });
 

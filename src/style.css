@@ -551,6 +551,8 @@ a { color: var(--blue); }
 .round-block { margin-bottom: 20px; }
 .round-block h3 { margin: 4px 0 6px; }
 .round-block td { vertical-align: top; }
+.ocr-results-panel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ocr-status { flex-basis: 100%; }
 .result-sel { min-width: 150px; padding: 5px 8px; }
 .explain-row td { background: var(--bg-inset); padding-top: 4px; padding-bottom: 4px; }
 .explain-row .pattern-list { margin: 0; padding-left: 18px; font-size: 0.86rem; color: var(--text-dim); }
