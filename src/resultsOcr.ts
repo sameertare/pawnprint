@@ -16,9 +16,69 @@ export interface OcrLine {
   y1: number;
 }
 
+const MAX_DIMENSION = 2200; // caps OCR time/memory on a full-resolution phone photo (often 3000-4000px)
+
+/** iPhones default to HEIC/HEIF for photos, which — unlike JPEG/PNG — has no built-in decode
+ *  support in any browser except Safari (no <img>, canvas, or createImageBitmap support). Since
+ *  this feature's whole point is "photograph a paper sheet with your phone," this is the single
+ *  most likely real-world failure and deserves its own fast, specific, actionable message instead
+ *  of a generic one after however long a doomed decode attempt takes to fail. */
+function isLikelyHeic(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return file.type === 'image/heic' || file.type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
+}
+
+/** Decodes `file` with whatever the browser supports, corrects EXIF orientation (photos taken in
+ *  portrait otherwise often decode sideways), downscales anything larger than MAX_DIMENSION on its
+ *  longest side, and re-encodes as a plain PNG blob — normalizing away format/orientation/size
+ *  quirks before Tesseract ever sees the image, rather than depending on its own image loading to
+ *  handle all of that. */
+async function preprocessImage(file: File): Promise<Blob> {
+  if (isLikelyHeic(file)) {
+    throw new Error(
+      "That looks like a HEIC/HEIF photo (the default format on iPhones), which browsers other than Safari can't open. " +
+      'In your phone\'s Camera settings, switch Formats to "Most Compatible" and retake the photo, or use "Edit → Duplicate as JPEG" ' +
+      'on the photo before uploading it here.'
+    );
+  }
+
+  let bitmap: ImageBitmap | HTMLImageElement;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    // Fall back to a plain <img> decode for browsers/formats createImageBitmap won't touch.
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      bitmap = img;
+    } catch {
+      throw new Error("Your browser couldn't open that image file — try a JPEG or PNG (a screenshot of the photo also works).");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  const w = 'naturalWidth' in bitmap ? bitmap.naturalWidth : bitmap.width;
+  const h = 'naturalHeight' in bitmap ? bitmap.naturalHeight : bitmap.height;
+  const scale = Math.min(1, MAX_DIMENSION / Math.max(w, h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * scale);
+  canvas.height = Math.round(h * scale);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  if ('close' in bitmap) bitmap.close();
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not process that image.'))), 'image/png');
+  });
+}
+
 /** Runs OCR on an image file and returns every detected line of text with its bounding box.
  *  Lazily imports tesseract.js so pages that never use this feature don't pay for it. */
 export async function ocrLines(file: File, onProgress?: (pct: number) => void): Promise<OcrLine[]> {
+  const image = await preprocessImage(file);
   const { createWorker } = await import('tesseract.js');
   const worker = await createWorker('eng', 1, {
     logger: (m: { status: string; progress: number }) => {
@@ -28,7 +88,7 @@ export async function ocrLines(file: File, onProgress?: (pct: number) => void): 
   try {
     // `blocks` (which nests down to paragraphs/lines/words) is opt-in — recognize() only returns
     // flat text by default, which would leave every line's bounding box unavailable for matching.
-    const { data } = await worker.recognize(file, {}, { blocks: true });
+    const { data } = await worker.recognize(image, {}, { blocks: true });
     const lines: OcrLine[] = [];
     for (const block of data.blocks ?? []) {
       for (const para of block.paragraphs) {

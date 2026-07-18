@@ -672,8 +672,13 @@ async function handleResultsPhoto(file: File, roundNo: number) {
           ' Double-check them before pairing the next round.'
         : `Couldn't confidently match any results from that photo — please enter them by hand.`
     );
-  } catch {
-    setStatus('Could not read that image — please enter results by hand.');
+  } catch (e) {
+    // Logged so a real failure (as opposed to the expected "couldn't decode this format" /
+    // "browser can't open this file" messages, which are already specific and actionable) is
+    // diagnosable from the console rather than a black box.
+    console.error('Read results from photo failed:', e);
+    const specific = e instanceof Error && e.message ? e.message : null;
+    setStatus(specific ?? 'Could not read that image — please enter results by hand.');
   } finally {
     ocrBusy = false;
   }
