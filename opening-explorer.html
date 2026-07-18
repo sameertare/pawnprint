@@ -118,6 +118,27 @@
         <div id="scouting-body"></div>
       </section>
 
+      <section class="card" id="drill-card" hidden>
+        <h2>🎓 Drill your repertoire</h2>
+        <p class="hint">Quizzes you only on your own turn, at positions from the tree above where you've actually played a move — never on your opponent's replies. Uses spaced repetition: answer correctly and a position comes back less often; miss it and it comes back sooner. Progress is saved in this browser, per player and color.</p>
+        <div id="drill-intro">
+          <p id="drill-due-count" class="hint"></p>
+          <button id="drill-start-btn" class="btn btn-primary">▶ Start drilling</button>
+        </div>
+        <div id="drill-session" class="explorer-layout" hidden>
+          <div class="explorer-board-col">
+            <div id="drill-board"></div>
+            <div id="drill-feedback" class="drill-feedback"></div>
+          </div>
+          <div class="explorer-side-col">
+            <div id="drill-progress" class="hint"></div>
+            <button id="drill-next-btn" class="btn btn-primary" hidden>Next →</button>
+            <button id="drill-stop-btn" class="btn btn-ghost">Stop drilling</button>
+          </div>
+        </div>
+        <div id="drill-summary" hidden></div>
+      </section>
+
       <section id="results" hidden>
         <div class="explorer-layout">
           <div class="explorer-board-col">

@@ -13,6 +13,9 @@ import { analyzeGame } from './analyze';
 import { aggregate, scorePct as aggScorePct } from './aggregate';
 import type { WDL, OpeningRow } from './aggregate';
 import type { GameRecord } from './types';
+import { Chess } from 'chess.js';
+import { newCard, isDue, review } from './srs';
+import type { SrsCard } from './srs';
 
 registerServiceWorker();
 initTheme();
@@ -75,8 +78,19 @@ const chesscomFetchBtn = $('#chesscom-fetch-btn') as HTMLButtonElement;
 const chesscomStatusEl = $('#chesscom-status');
 const scoutingCard = $('#scouting-card');
 const scoutingBody = $('#scouting-body');
+const drillCard = $('#drill-card');
+const drillDueCount = $('#drill-due-count');
+const drillStartBtn = $('#drill-start-btn') as HTMLButtonElement;
+const drillIntro = $('#drill-intro');
+const drillSession = $('#drill-session');
+const drillFeedback = $('#drill-feedback');
+const drillProgress = $('#drill-progress');
+const drillNextBtn = $('#drill-next-btn') as HTMLButtonElement;
+const drillStopBtn = $('#drill-stop-btn') as HTMLButtonElement;
+const drillSummary = $('#drill-summary');
 
 const board = new Board($('#board'));
+const drillBoard = new Board($('#drill-board'));
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -118,6 +132,7 @@ function syncUiToActiveProfile() {
   } else {
     configCard.hidden = true;
     resultsEl.hidden = true;
+    drillCard.hidden = true;
   }
 }
 
@@ -455,7 +470,196 @@ function rebuildAndRender() {
   board.setOrientation(color);
   resultsEl.hidden = false;
   render();
+  updateDrillCard();
 }
+
+// ======================================================================
+// opening repertoire trainer — spaced-repetition drill on the tree above
+// ======================================================================
+interface QuizNode { path: string[]; node: TreeNode }
+
+/** Every position in the tree where it's the tracked player's own turn AND they've actually
+ *  played at least one move from there — i.e. everything worth quizzing. Never includes the
+ *  opponent's replies, only the tracked player's own decisions. */
+function collectQuizzableNodes(root: TreeNode, color: Color): QuizNode[] {
+  const out: QuizNode[] = [];
+  const walk = (node: TreeNode, path: string[]) => {
+    if (node.fen.split(' ')[1] === color && node.children.size > 0) out.push({ path, node });
+    for (const [san, child] of node.children) walk(child, [...path, san]);
+  };
+  walk(root, []);
+  return out;
+}
+
+function srsStorageKey(): string | null {
+  const p = active();
+  if (!p.username) return null;
+  const color = colorSelect.value as Color;
+  return `openfile-srs:${p.username.trim().toLowerCase()}:${color}`;
+}
+
+function loadSrsData(): Record<string, SrsCard> {
+  const key = srsStorageKey();
+  if (!key) return {};
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {}; // corrupt JSON or private-browsing storage denial — start fresh rather than crash
+  }
+}
+
+function saveSrsData(data: Record<string, SrsCard>) {
+  const key = srsStorageKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {
+    // localStorage unavailable/full — drilling still works for this session, just won't persist
+  }
+}
+
+function pathKey(path: string[]): string {
+  return path.join('|');
+}
+
+// ---------- drill session state ----------
+let srsData: Record<string, SrsCard> = {};
+let drillQueue: QuizNode[] = [];
+let drillCurrent: QuizNode | null = null;
+let drillStats = { correct: 0, incorrect: 0 };
+let drillAwaitingNext = false;
+
+function updateDrillCard() {
+  if (mode !== 'me' || !tree) { drillCard.hidden = true; return; }
+  const quizzable = collectQuizzableNodes(tree, colorSelect.value as Color);
+  if (!quizzable.length) { drillCard.hidden = true; return; }
+  drillCard.hidden = false;
+  srsData = loadSrsData();
+  const now = new Date();
+  const dueCount = quizzable.filter((q) => {
+    const card = srsData[pathKey(q.path)];
+    return !card || isDue(card, now);
+  }).length;
+  drillDueCount.textContent = `${dueCount} of ${quizzable.length} position(s) due for review.`;
+  drillIntro.hidden = false;
+  drillSession.hidden = true;
+  drillSummary.hidden = true;
+}
+
+const DRILL_SESSION_CAP = 30; // a generous single-session size; click Start again for more
+
+drillStartBtn.addEventListener('click', () => {
+  if (!tree) return;
+  const color = colorSelect.value as Color;
+  const quizzable = collectQuizzableNodes(tree, color);
+  srsData = loadSrsData();
+  const now = new Date();
+  // Overdue/never-seen first (oldest due date first), then anything not yet due, capped to a
+  // reasonable session size so "Start drilling" doesn't try to quiz the entire tree at once.
+  const withDue = quizzable.map((q) => ({ q, card: srsData[pathKey(q.path)] }));
+  withDue.sort((a, b) => {
+    const aDue = a.card ? new Date(a.card.dueAt).getTime() : -Infinity; // never-seen sorts first
+    const bDue = b.card ? new Date(b.card.dueAt).getTime() : -Infinity;
+    return aDue - bDue;
+  });
+  drillQueue = withDue.filter((x) => !x.card || isDue(x.card, now)).slice(0, DRILL_SESSION_CAP).map((x) => x.q);
+  if (!drillQueue.length) {
+    // Nothing due — offer to practice ahead of schedule anyway rather than a dead end.
+    drillQueue = withDue.slice(0, DRILL_SESSION_CAP).map((x) => x.q);
+  }
+  drillStats = { correct: 0, incorrect: 0 };
+  drillIntro.hidden = true;
+  drillSummary.hidden = true;
+  drillSession.hidden = false;
+  drillBoard.setOrientation(color);
+  nextDrillPosition();
+});
+
+function nextDrillPosition() {
+  drillFeedback.className = 'drill-feedback';
+  drillFeedback.innerHTML = '';
+  drillNextBtn.hidden = true;
+  drillAwaitingNext = false;
+  drillBoard.setSelected(null);
+  drillBoard.setArrow(null);
+
+  const next = drillQueue.shift();
+  if (!next) {
+    drillSession.hidden = true;
+    drillSummary.hidden = false;
+    const total = drillStats.correct + drillStats.incorrect;
+    drillSummary.innerHTML = `
+      <div class="drill-summary-stats">
+        <div class="stat-card"><span class="big pos">${drillStats.correct}</span><span class="label">Correct</span></div>
+        <div class="stat-card"><span class="big neg">${drillStats.incorrect}</span><span class="label">Missed</span></div>
+      </div>
+      <p class="hint">${total} position(s) drilled this session.</p>
+      <button id="drill-restart-btn" class="btn btn-primary">▶ Drill again</button>
+    `;
+    $('#drill-restart-btn').addEventListener('click', () => { updateDrillCard(); drillStartBtn.click(); });
+    return;
+  }
+  drillCurrent = next;
+  drillBoard.setFen(next.node.fen);
+  drillProgress.textContent = `${drillQueue.length + 1} position(s) left this session · ${drillStats.correct} correct, ${drillStats.incorrect} missed so far`;
+}
+
+function answerDrill(playedSan: string) {
+  if (!drillCurrent || drillAwaitingNext) return;
+  drillAwaitingNext = true;
+  const key = pathKey(drillCurrent.path);
+  const correct = drillCurrent.node.children.has(playedSan);
+  const prior = srsData[key] ?? newCard();
+  srsData[key] = review(prior, correct);
+  saveSrsData(srsData);
+
+  const summaries = childSummaries(drillCurrent.node);
+  const list = summaries
+    .map((c) => `<li><b>${esc(c.san)}</b> — ${c.games} game(s), ${c.scorePct}% score${c.san === playedSan ? ' ✓ (what you played)' : ''}</li>`)
+    .join('');
+
+  if (correct) {
+    drillStats.correct++;
+    drillFeedback.className = 'drill-feedback correct';
+    drillFeedback.innerHTML = `<b>✓ Correct</b> — ${esc(playedSan)} is a move you've played here.<ul>${list}</ul>`;
+  } else {
+    drillStats.incorrect++;
+    drillFeedback.className = 'drill-feedback incorrect';
+    drillFeedback.innerHTML = `<b>✗ Not in your repertoire</b> — you played ${esc(playedSan)}, but from this position you've actually played:<ul>${list}</ul>`;
+    // Requeue at the back of this session's queue so a miss gets one more attempt before the
+    // session ends, on top of the SRS record already scheduling it sooner for next time.
+    if (drillCurrent) drillQueue.push(drillCurrent);
+  }
+  drillNextBtn.hidden = false;
+}
+
+drillBoard.onSquareClick = (sq) => {
+  if (!drillCurrent || drillAwaitingNext) return;
+  const fen = drillCurrent.node.fen;
+  const c = new Chess(fen);
+  const piece = c.get(sq as any);
+  const sel = drillBoard.getSelected();
+  if (sel && sel !== sq) {
+    const moves = c.moves({ square: sel as any, verbose: true }) as any[];
+    const m = moves.find((x) => x.to === sq);
+    if (m) {
+      drillBoard.setSelected(null);
+      drillBoard.setLastMove([m.from, m.to]);
+      answerDrill(m.san);
+      return;
+    }
+  }
+  if (piece && piece.color === c.turn()) drillBoard.setSelected(sq);
+  else drillBoard.setSelected(null);
+};
+
+drillNextBtn.addEventListener('click', nextDrillPosition);
+drillStopBtn.addEventListener('click', () => {
+  drillQueue = [];
+  drillCurrent = null;
+  updateDrillCard();
+});
 
 $('#root-btn').addEventListener('click', () => { path = []; render(); });
 $('#up-btn').addEventListener('click', () => { path = path.slice(0, -1); render(); });
