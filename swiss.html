@@ -27,6 +27,7 @@
       </div>
           <button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark theme">☀️</button>
     </nav>
+    <div class="privacy-banner">🔒 <strong>Private by design</strong> — everything runs locally in your browser. Nothing is uploaded unless you explicitly choose to.</div>
     <div id="app">
       <header class="app-header">
         <h1>🏆 Swiss Pairings</h1>
@@ -171,6 +172,18 @@ Ian Nepomniachtchi 2758"></textarea>
             <button id="add-family-group-btn" class="btn">Add group</button>
           </div>
           <div id="family-groups-list"></div>
+        </details>
+      </section>
+
+      <section class="card" id="player-status-card" hidden>
+        <details id="player-status-details">
+          <summary><h2>Player status <span id="withdrawn-count" class="hint"></span></h2></summary>
+          <p class="hint">Mark a player withdrawn if they've dropped out of the event — they're skipped when pairing every future round and no longer offered for byes or family groups. This doesn't change any round already paired; enter their current board as a normal result (or use "Fix a mistake in this round" for it).</p>
+          <div id="active-player-list" class="bye-player-list"></div>
+          <div class="config-row" style="align-items:center;">
+            <button id="mark-withdrawn-btn" class="btn btn-ghost">Mark checked player(s) withdrawn</button>
+          </div>
+          <div id="withdrawn-players-list"></div>
         </details>
       </section>
 

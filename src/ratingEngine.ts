@@ -145,7 +145,7 @@ export function estimateRating(input: RatingEstimateInput): RatingEstimateOutcom
   }
 
   const uncappedNewRating = currentRating + baseChange + bonus;
-  const newRating = clamp(Math.round(uncappedNewRating), MIN_RATING, 2700);
+  const newRating = clamp(Math.round(uncappedNewRating), MIN_RATING, MAX_RATING);
   const ratingChange = newRating - currentRating;
 
   const avgOpponent = opponents.reduce((a, b) => a + b, 0) / m;

@@ -1,6 +1,14 @@
 /** Advanced analysis features: move time analysis, blunder clustering, opening prep stats. */
 
-import type { GameRecord } from './types';
+import type { GameRecord, Phase } from './types';
+
+/** Approximates phase from move number alone — only used as a fallback for reports saved before
+ *  clockSeries/errorSeries entries carried their own authoritative (piece-count-based) phase. */
+function fallbackPhase(moveNo: number): Phase {
+  if (moveNo <= 12) return 'opening';
+  if (moveNo > 18) return 'endgame';
+  return 'middlegame';
+}
 
 export interface TimePhaseStats {
   phase: 'opening' | 'middlegame' | 'endgame';
@@ -17,15 +25,6 @@ export interface BlunderCluster {
   phase: 'opening' | 'middlegame' | 'endgame' | 'mixed';
 }
 
-export interface OpeningPrepStats {
-  opening: string;
-  family: string;
-  totalGames: number;
-  practiceGames: number;      // games where opening was analyzed/studied
-  ratedGames: number;         // games from actual events
-  winRate: number;            // score %
-}
-
 /** Analyze time distribution across game phases from clock series. */
 export function analyzeTimeByPhase(games: GameRecord[]): TimePhaseStats[] {
   const phases: Record<string, { times: number[]; moveCount: number }> = {
@@ -36,13 +35,8 @@ export function analyzeTimeByPhase(games: GameRecord[]): TimePhaseStats[] {
 
   for (const g of games) {
     if (!g.clockDataAvailable || !g.clockSeries.length) continue;
-    for (const { moveNo, sec } of g.clockSeries) {
-      // Determine phase from error series position.
-      let phase: 'opening' | 'middlegame' | 'endgame' = 'middlegame';
-      // This is a simple heuristic; ideally would use the actual phase data.
-      if (moveNo <= 12) phase = 'opening';
-      else if (moveNo > 18) phase = 'endgame';
-
+    for (const { moveNo, sec, phase: recorded } of g.clockSeries) {
+      const phase = recorded ?? fallbackPhase(moveNo);
       phases[phase].times.push(sec);
       phases[phase].moveCount++;
     }
@@ -65,11 +59,14 @@ export function analyzeTimeByPhase(games: GameRecord[]): TimePhaseStats[] {
 
 /** Detect clustering of blunders by move number. */
 export function findBlunderClusters(games: GameRecord[]): BlunderCluster[] {
-  const blundersByMove = new Map<number, number>();
+  const blundersByMove = new Map<number, { count: number; phases: Set<Phase> }>();
   for (const g of games) {
     for (const err of g.errorSeries) {
       if (err.kind === 'blunder') {
-        blundersByMove.set(err.moveNo, (blundersByMove.get(err.moveNo) ?? 0) + 1);
+        const entry = blundersByMove.get(err.moveNo) ?? { count: 0, phases: new Set<Phase>() };
+        entry.count++;
+        entry.phases.add(err.phase ?? fallbackPhase(err.moveNo));
+        blundersByMove.set(err.moveNo, entry);
       }
     }
   }
@@ -78,78 +75,31 @@ export function findBlunderClusters(games: GameRecord[]): BlunderCluster[] {
 
   const moves = Array.from(blundersByMove.keys()).sort((a, b) => a - b);
   const clusters: BlunderCluster[] = [];
-  let currentCluster: number[] = [moves[0]];
 
+  // A cluster's phase is the phase every blunder in it actually occurred in (from the real,
+  // piece-count-based phase recorded per move) — 'mixed' only when they genuinely span phases,
+  // rather than guessing a single phase from the cluster's first move number.
+  const finalizeCluster = (moveNos: number[]) => {
+    const total = moveNos.reduce((sum, m) => sum + (blundersByMove.get(m)?.count ?? 0), 0);
+    if (total < 2) return;
+    const phases = new Set<Phase>();
+    for (const m of moveNos) for (const p of blundersByMove.get(m)!.phases) phases.add(p);
+    const phase: BlunderCluster['phase'] = phases.size === 1 ? [...phases][0] : 'mixed';
+    clusters.push({ moveRange: [moveNos[0], moveNos[moveNos.length - 1]], count: total, phase });
+  };
+
+  let currentCluster: number[] = [moves[0]];
   for (let i = 1; i < moves.length; i++) {
-    // Cluster if within 2 moves of the previous, or if same phase.
+    // Cluster if within 2 moves of the previous.
     if (moves[i] - moves[i - 1] <= 2) {
       currentCluster.push(moves[i]);
     } else {
-      // Finalize current cluster if it has 2+ blunders.
-      if (currentCluster.length >= 1) {
-        const total = currentCluster.reduce((sum, m) => sum + (blundersByMove.get(m) ?? 0), 0);
-        if (total >= 2) {
-          const phase = currentCluster[0] <= 12 ? 'opening' : currentCluster[0] <= 18 ? 'middlegame' : 'endgame';
-          clusters.push({
-            moveRange: [currentCluster[0], currentCluster[currentCluster.length - 1]],
-            count: total,
-            phase,
-          });
-        }
-      }
+      finalizeCluster(currentCluster);
       currentCluster = [moves[i]];
     }
   }
-
-  // Finalize the last cluster.
-  if (currentCluster.length >= 1) {
-    const total = currentCluster.reduce((sum, m) => sum + (blundersByMove.get(m) ?? 0), 0);
-    if (total >= 2) {
-      const phase = currentCluster[0] <= 12 ? 'opening' : currentCluster[0] <= 18 ? 'middlegame' : 'endgame';
-      clusters.push({
-        moveRange: [currentCluster[0], currentCluster[currentCluster.length - 1]],
-        count: total,
-        phase,
-      });
-    }
-  }
+  finalizeCluster(currentCluster);
 
   return clusters;
 }
 
-/** Analyze which openings have been practiced (studied/analyzed) vs played in rated events. */
-export function analyzeOpeningPrep(games: GameRecord[]): OpeningPrepStats[] {
-  const openings = new Map<string, { total: number; practice: number; rated: number; scores: number[] }>();
-
-  for (const g of games) {
-    const key = `${g.family}|${g.opening}`;
-    if (!openings.has(key)) {
-      openings.set(key, { total: 0, practice: 0, rated: 0, scores: [] });
-    }
-    const stat = openings.get(key)!;
-    stat.total++;
-
-    // Classify as practice or rated based on event/site heuristics.
-    const isPractice = g.event?.toLowerCase().includes('practice') || g.site?.toLowerCase().includes('practice');
-    const isRated = g.event?.toLowerCase().includes('tournament') || /\d+/.test(g.event ?? '');
-    if (isPractice) stat.practice++;
-    if (isRated) stat.rated++;
-
-    // Score: 1 for win, 0.5 for draw, 0 for loss.
-    const score = g.result === 'win' ? 1 : g.result === 'draw' ? 0.5 : 0;
-    stat.scores.push(score);
-  }
-
-  return Array.from(openings.entries()).map(([key, stat]) => {
-    const [family, opening] = key.split('|');
-    const winRate = stat.scores.length ? (stat.scores.reduce((a, b) => a + b, 0) / stat.scores.length) * 100 : 0;
-    return {
-      opening,
-      family,
-      totalGames: stat.total,
-      practiceGames: stat.practice,
-      ratedGames: stat.rated,
-      winRate: Math.round(winRate),
-    };
-  });
-}

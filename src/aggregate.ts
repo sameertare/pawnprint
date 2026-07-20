@@ -1,7 +1,7 @@
 import type { ErrCounts, GameRecord, Phase } from './types';
 import { LOSING_WINPCT, WINNING_WINPCT } from './analyze';
-import { analyzeTimeByPhase, findBlunderClusters, analyzeOpeningPrep } from './advancedAnalysis';
-import type { TimePhaseStats, BlunderCluster, OpeningPrepStats } from './advancedAnalysis';
+import { analyzeTimeByPhase, findBlunderClusters } from './advancedAnalysis';
+import type { TimePhaseStats, BlunderCluster } from './advancedAnalysis';
 
 export interface WDL {
   games: number;
@@ -84,7 +84,6 @@ export interface Aggregates {
   analyzedCount: number;
   timeByPhase?: TimePhaseStats[];
   blunderClusters?: BlunderCluster[];
-  openingPrep?: OpeningPrepStats[];
 }
 
 function emptyWDL(): WDL {
@@ -346,10 +345,9 @@ export function aggregate(games: GameRecord[]): Aggregates {
 
   const recommendations = recommend(phases, tactics, patterns, weakest, analyzed.length);
 
-  // Advanced analysis: time pressure, blunder clustering, opening prep.
+  // Advanced analysis: time pressure, blunder clustering.
   const timeByPhase = analyzeTimeByPhase(games);
   const blunderClusters = findBlunderClusters(games);
-  const openingPrep = analyzeOpeningPrep(games).sort((a, b) => b.totalGames - a.totalGames);
 
   return {
     total, byColor, openings, strongest, weakest,
@@ -366,7 +364,6 @@ export function aggregate(games: GameRecord[]): Aggregates {
     analyzedCount: analyzed.length,
     timeByPhase,
     blunderClusters,
-    openingPrep,
   };
 }
 

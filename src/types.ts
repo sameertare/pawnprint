@@ -63,8 +63,8 @@ export interface GameRecord {
   endgameType: string | null;   // e.g. "Rook endgame", "Pawn endgame"
   clockDataAvailable: boolean;
   timePressureBlunders: number; // blunders/mistakes played with < 30s on the clock
-  clockSeries: { moveNo: number; sec: number }[]; // seconds remaining after each of the user's moves, in order
-  errorSeries: { moveNo: number; kind: 'inaccuracy' | 'mistake' | 'blunder' }[]; // every flagged move, in order
+  clockSeries: { moveNo: number; sec: number; phase?: Phase }[]; // seconds remaining after each of the user's moves, in order
+  errorSeries: { moveNo: number; kind: 'inaccuracy' | 'mistake' | 'blunder'; phase?: Phase }[]; // every flagged move, in order
   worstMoves: WorstMove[];
   evalGraph: number[] | null; // white-perspective cp per ply (start position + after each move), clamped for charting; null if not analyzed
   sans: string[]; // SAN for every ply, for reconstructing an annotated PGN on export

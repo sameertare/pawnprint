@@ -22,6 +22,23 @@ let ev: SwissEvent | null = null;
 function cur(): Tournament | null { return ev ? ev.sections[ev.active] : null; }
 function save() { if (ev) localStorage.setItem(STORE_KEY, JSON.stringify(ev)); }
 
+// A cheap structural check on imported/loaded data — catches the common cases (a hand-edited or
+// wrong-schema file missing a field every render function assumes is an array) before it's ever
+// assigned to `ev` or persisted. Not exhaustive on its own; the import handler backs it with an
+// actual render-and-rollback, and boot wraps its initial render too, so neither path can leave the
+// app permanently stuck on a shape this check didn't anticipate.
+function isValidTournament(t: any): t is Tournament {
+  return !!t && typeof t === 'object' &&
+    typeof t.name === 'string' &&
+    Array.isArray(t.players) &&
+    Array.isArray(t.rounds) &&
+    Array.isArray(t.familyGroups) &&
+    typeof t.totalRounds === 'number';
+}
+function isValidEvent(data: any): data is SwissEvent {
+  return !!data && typeof data === 'object' && Array.isArray(data.sections) && data.sections.every(isValidTournament);
+}
+
 /** Which bye row (if any) currently has its "add extra game" form open — transient UI state, not saved. */
 let addingExtraFor: { round: number; byeId: number } | null = null;
 /** Which board's pairing explanation (if any) is currently expanded — transient UI state, not saved. */
@@ -342,6 +359,29 @@ $('#family-groups-list').addEventListener('click', (e) => {
   renderAll();
 });
 
+// ---------- player status (withdraw / reactivate) ----------
+$('#mark-withdrawn-btn').addEventListener('click', () => {
+  const t = cur();
+  if (!t) return;
+  const checked = [...document.querySelectorAll<HTMLInputElement>('#active-player-list input[type="checkbox"]:checked')];
+  if (!checked.length) return;
+  const ids = new Set(checked.map((box) => parseInt(box.dataset.pid!, 10)));
+  for (const p of t.players) if (ids.has(p.id)) p.withdrawn = true;
+  save();
+  renderAll();
+});
+
+$('#withdrawn-players-list').addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('.reactivate-player-btn') as HTMLButtonElement | null;
+  const t = cur();
+  if (!btn || !t) return;
+  const pid = parseInt(btn.dataset.pid!, 10);
+  const p = t.players.find((pl) => pl.id === pid);
+  if (p) p.withdrawn = false;
+  save();
+  renderAll();
+});
+
 $('#reset-tourn').addEventListener('click', () => {
   if (confirm('Delete this event (all sections) and start over?')) {
     ev = null;
@@ -372,17 +412,37 @@ $('#export-json').addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 $('#import-json').addEventListener('change', async () => {
-  const f = ($('#import-json') as HTMLInputElement).files?.[0];
+  const input = $('#import-json') as HTMLInputElement;
+  const f = input.files?.[0];
+  input.value = ''; // reset so re-selecting the same file after a fix re-fires change
   if (!f) return;
+
+  let data: any;
   try {
-    const data = JSON.parse(await f.text());
-    if (data && Array.isArray(data.sections)) ev = data;
-    else if (data && Array.isArray(data.players)) ev = { name: data.name || 'Swiss', sections: [data], active: 0 };
-    else throw new Error('bad');
-    ev!.active = 0;
-    save();
+    data = JSON.parse(await f.text());
+  } catch { alert('Could not read that tournament file — it doesn\'t look like valid JSON.'); return; }
+
+  let candidate: SwissEvent;
+  if (isValidEvent(data)) candidate = data;
+  else if (isValidTournament(data)) candidate = { name: data.name || 'Swiss', sections: [data], active: 0 };
+  else { alert('Could not read that tournament file — it\'s missing fields a valid export always has.'); return; }
+  candidate.active = 0;
+
+  // Render the candidate before persisting anything — a malformed shape that slipped past the
+  // structural check above would otherwise get written to localStorage by save() and then crash
+  // every future page load's own renderAll() with no way back in except manually clearing storage.
+  const previous = ev;
+  ev = candidate;
+  try {
     renderAll();
-  } catch { alert('Could not read that tournament file.'); }
+  } catch (e) {
+    console.error('Import produced an unrenderable tournament:', e);
+    ev = previous;
+    renderAll();
+    alert('That file loaded but produced an invalid tournament — import cancelled, nothing was changed.');
+    return;
+  }
+  save();
 });
 $('#print-btn').addEventListener('click', () => window.print());
 
@@ -392,6 +452,7 @@ function renderAll() {
   ($('#control-card') as HTMLElement).hidden = !hasE;
   ($('#bye-request-card') as HTMLElement).hidden = !hasE;
   ($('#family-group-card') as HTMLElement).hidden = !hasE;
+  ($('#player-status-card') as HTMLElement).hidden = !hasE;
   ($('#setup-card') as HTMLElement).hidden = hasE;
   const t = cur();
   ($('#standings-card') as HTMLElement).hidden = !t || !t.rounds.length;
@@ -409,6 +470,7 @@ function renderAll() {
   renderRounds(t);
   renderByeRequestCard(t);
   renderFamilyGroupCard(t);
+  renderPlayerStatusCard(t);
   renderStandings(t);
   renderWallChart(t);
 }
@@ -465,6 +527,29 @@ function renderFamilyGroupCard(t: Tournament) {
         .join('')}</ul>`
     : '';
   $('#family-group-count').textContent = t.familyGroups.length ? `(${t.familyGroups.length})` : '';
+}
+
+function renderPlayerStatusCard(t: Tournament) {
+  const active = t.players.filter((p) => !p.withdrawn && !p.isHouse).sort((a, b) => a.name.localeCompare(b.name));
+  $('#active-player-list').innerHTML = active.length
+    ? active
+        .map(
+          (p) =>
+            `<label class="bye-player-item"><input type="checkbox" data-pid="${p.id}"> ${esc(p.name)}${p.rating ? ` (${p.rating})` : ''}</label>`
+        )
+        .join('')
+    : '<p class="hint">No active players.</p>';
+
+  const withdrawn = t.players.filter((p) => p.withdrawn && !p.isHouse).sort((a, b) => a.name.localeCompare(b.name));
+  $('#withdrawn-players-list').innerHTML = withdrawn.length
+    ? `<h3>Withdrawn</h3><ul class="pattern-list">${withdrawn
+        .map(
+          (p) =>
+            `<li>${esc(p.name)}${p.rating ? ` (${p.rating})` : ''} <button class="btn-icon reactivate-player-btn" data-pid="${p.id}" title="Reactivate — eligible for pairing again from the next round">↩ Reactivate</button></li>`
+        )
+        .join('')}</ul>`
+    : '';
+  $('#withdrawn-count').textContent = withdrawn.length ? `(${withdrawn.length} withdrawn)` : '';
 }
 
 function renderSectionTabs() {
@@ -949,10 +1034,22 @@ const saved = localStorage.getItem(STORE_KEY);
 if (saved) {
   try {
     const data = JSON.parse(saved);
-    if (data && Array.isArray(data.sections)) ev = data;
-    else if (data && Array.isArray(data.players)) ev = { name: data.name || 'Swiss', sections: [data], active: 0 }; // migrate old single-tournament save
+    if (isValidEvent(data)) ev = data;
+    else if (isValidTournament(data)) ev = { name: data.name || 'Swiss', sections: [data], active: 0 }; // migrate old single-tournament save
   } catch { ev = null; }
 }
 applyFormatHint();
-renderAll();
+try {
+  renderAll();
+} catch (e) {
+  // Belt-and-suspenders alongside the import handler's own validation — if a saved event still
+  // turns out to be unrenderable (e.g. state saved by a since-fixed bug), reset rather than leave
+  // the TD stuck on a permanently broken page with no way back in short of manually clearing
+  // browser storage.
+  console.error('Saved tournament data is corrupted — resetting:', e);
+  ev = null;
+  localStorage.removeItem(STORE_KEY);
+  renderAll();
+  alert('Your saved tournament data was corrupted and had to be reset. If you have an exported JSON backup, you can re-import it from "⋯ More options".');
+}
 previewRoster();

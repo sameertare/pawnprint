@@ -53,6 +53,19 @@ function hasAnyPlayerName(g: ParsedGame, matchKeys: Set<string>): boolean {
 function hasAnyNameAtAll(g: ParsedGame): boolean {
   return (!!g.headers['White'] && g.headers['White'] !== '?') || (!!g.headers['Black'] && g.headers['Black'] !== '?');
 }
+// A game with exactly one side named (the other blank/"?") is genuinely ambiguous — the unnamed
+// side could be the analyzed player (their name just wasn't recorded), or the game could belong to
+// two other people entirely. Rather than guess, gamesForPlayer() excludes it like any other
+// non-match; this only flags which games fell into that specific ambiguous case, so the exclusion
+// is visible instead of the game silently vanishing with no trace at all.
+function isAmbiguousOneSidedExclusion(g: ParsedGame, matchKeys: Set<string>): boolean {
+  const white = g.headers['White'];
+  const black = g.headers['Black'];
+  const whiteNamed = !!white && white !== '?';
+  const blackNamed = !!black && black !== '?';
+  if (whiteNamed === blackNamed) return false; // both named, or neither — not this case
+  return !isPlayerNameMatch(whiteNamed ? white : black, matchKeys);
+}
 // A chapter with no [White]/[Black] tags at all has no other player to attribute it to, so it's
 // assumed to be the analyzed player's game (analyzeGame infers their color from the chapter title
 // when possible).
@@ -118,11 +131,21 @@ async function handleFiles(files: FileList | File[]) {
     return true;
   });
 
+  // Detect the player before building the summary chips so an ambiguous-exclusion count (below)
+  // can be shown alongside the others, instead of those games silently vanishing with no trace.
+  const detected = (parsedGames.length || baseReport) ? detectMainPlayer() : null;
+  detectedUsername = detected?.name ?? null;
+  detectedMatchKeys = detected?.matchKeys ?? null;
+  const ambiguousExcluded = detectedMatchKeys
+    ? parsedGames.filter((g) => isAmbiguousOneSidedExclusion(g, detectedMatchKeys!)).length
+    : 0;
+
   const chips: string[] = [];
   if (parsedGames.length) chips.push(`<span class="chip">♟ ${parsedGames.length} game(s) loaded from PGN</span>`);
   if (baseReport) chips.push(`<span class="chip">📄 previous report: ${baseReport.games.length} analyzed game(s) for <b>${esc(baseReport.meta.username)}</b></span>`);
   if (failed) chips.push(`<span class="chip">⚠ ${failed} item(s) could not be parsed</span>`);
   if (mdLoaded && !parsedGames.length) chips.push(`<span class="chip">Tip: add new PGN files to extend this report</span>`);
+  if (ambiguousExcluded) chips.push(`<span class="chip">⚠ ${ambiguousExcluded} game(s) with only one player named — not matching <b>${esc(detectedUsername!)}</b> — were excluded</span>`);
   let html = chips.join(' ');
   if (failureCounts.size) {
     const rows = [...failureCounts.entries()]
@@ -138,9 +161,6 @@ async function handleFiles(files: FileList | File[]) {
   fileSummary.innerHTML = html;
 
   if (parsedGames.length || baseReport) {
-    const detected = detectMainPlayer();
-    detectedUsername = detected?.name ?? null;
-    detectedMatchKeys = detected?.matchKeys ?? null;
     detectedPlayerName.textContent = detectedUsername ?? '—';
     const total = detectedMatchKeys ? gamesForPlayer(detectedMatchKeys).length : 0;
     detectedPlayerCount.textContent = detectedMatchKeys ? ` — ${total} game${total === 1 ? '' : 's'} will be analyzed` : '';
@@ -261,6 +281,11 @@ async function runAnalysis() {
           : []),
       ],
     };
+    // Fold this run's results back into baseReport so a second "Analyze" click later in the same
+    // session (e.g. after dropping in a few more PGNs) only re-analyzes the new games — without
+    // this, knownIds below stays built from whatever was true before this run, and every click
+    // would silently re-run the engine on every already-analyzed game again.
+    baseReport = { version: 1, meta, games: records };
 
     currentAgg = aggregate(records);
     currentMarkdown = renderMarkdown(currentAgg, records, meta);
@@ -587,29 +612,6 @@ function renderResults(a: Aggregates, username: string, newCount: number, oldCou
       <ul>${a.blunderClusters.map(c => `
         <li><b>Moves ${c.moveRange[0]}–${c.moveRange[1]}</b> (${c.phase}): ${c.count} blunder(s)</li>
       `).join('')}</ul>
-    </div>`);
-  }
-
-  // Opening preparation stats
-  if (a.openingPrep && a.openingPrep.length > 0) {
-    const prepTotals = a.openingPrep.reduce((acc, o) => {
-      acc.practice += o.practiceGames;
-      acc.rated += o.ratedGames;
-      acc.total += o.totalGames;
-      return acc;
-    }, { practice: 0, rated: 0, total: 0 });
-    const prepRate = prepTotals.total ? Math.round((prepTotals.practice / prepTotals.total) * 100) : 0;
-
-    html.push(`<div class="card"><h2>📖 Opening preparation</h2>
-      <p class="section-note"><b>${prepRate}%</b> of games were in studied/practice openings vs <b>${100 - prepRate}%</b> improvised.</p>
-      ${prepTotals.practice > 0 ? `
-        <p class="hint">Your most played prepared openings:</p>
-        <ul>${a.openingPrep
-          .filter(o => o.practiceGames > 0)
-          .slice(0, 5)
-          .map(o => `<li><b>${esc(o.opening)}</b>: ${o.totalGames} game(s), ${o.winRate}% score</li>`)
-          .join('')}</ul>
-      ` : ''}
     </div>`);
   }
 

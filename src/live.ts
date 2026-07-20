@@ -418,6 +418,14 @@ async function pump() {
         bestU[i] = null; mateN[i] = null;
       } else {
         const r = await eng.evaluate(fen, curDepth());
+        // line/evalsW may have been reassigned (a new PGN/game loaded, or the position reset)
+        // while this search was in flight. Unlike updateCandidates/updateTablebase (which discard
+        // one stale result and return), pump() loops — so a stale write here wouldn't just show one
+        // wrong eval, it would keep writing into the old array's indices, potentially past the end
+        // of a shorter new one, or throw on the next iteration when it reads line[i] for an index
+        // that no longer exists. Bail the whole loop; whatever triggered the reassignment already
+        // calls pump() again for the new line.
+        if (line[i]?.fen !== fen) break;
         evalsW[i] = whiteCp(fen, r.cp); bestU[i] = r.bestmove; mateN[i] = r.mateIn;
       }
       // refresh anything that depends on this newly-evaluated index
@@ -785,14 +793,15 @@ function handleStreamMessage(msg: any, status: HTMLElement) {
   }
 }
 
-async function streamLichessGame(id: string, signal: AbortSignal, status: HTMLElement) {
+async function streamLichessGame(id: string, controller: AbortController, status: HTMLElement) {
+  const signal = controller.signal;
   let res: Response;
   try {
     res = await fetch(`https://lichess.org/api/stream/game/${id}`, { headers: { Accept: 'application/x-ndjson' }, signal });
-  } catch { if (!signal.aborted) { status.innerHTML = `<span class="neg">Could not reach lichess.</span>`; disconnect(); } return; }
+  } catch { if (!signal.aborted) { status.innerHTML = `<span class="neg">Could not reach lichess.</span>`; disconnect(controller); } return; }
   if (!res.ok || !res.body) {
     status.innerHTML = `<span class="neg">Lichess returned ${res.status} — game not found or not viewable.</span>`;
-    disconnect();
+    disconnect(controller);
     return;
   }
   const reader = res.body.getReader();
@@ -812,7 +821,7 @@ async function streamLichessGame(id: string, signal: AbortSignal, status: HTMLEl
     }
     status.innerHTML += ' <span class="hint">· stream ended (you can still navigate the game).</span>';
   } catch { if (!signal.aborted) status.innerHTML += ' <span class="neg">· connection lost.</span>'; }
-  finally { disconnect(); }
+  finally { disconnect(controller); }
 }
 
 async function connectLive(id: string) {
@@ -832,7 +841,7 @@ async function connectLive(id: string) {
   // arrived (the visible "2-3 moves behind" lag). Starting it first means the stream itself
   // starts capturing deltas (via the rebase-on-first-message path in appendFromStream) from the
   // moment we connect, independent of how long the history backfill takes.
-  const streamPromise = streamLichessGame(id, signal, status);
+  const streamPromise = streamLichessGame(id, liveAbort, status);
 
   // 2) Backfill full game history in parallel so earlier moves are still navigable. Splice it in
   // ahead of whatever the live stream has already built, rather than blindly overwriting `line`
@@ -947,7 +956,15 @@ $('#connect-btn').addEventListener('click', () => {
   else connectFen(parsed.fen);
 });
 
-function disconnect() {
+// `forController`, when passed, scopes this call to "only tear down if that specific connection is
+// still the current one" — used by a stream's own cleanup path, since a slow-to-unwind old stream
+// (aborted, but its reader.read() hasn't settled yet) can otherwise reach its `finally` block after
+// a new connection has already started, and tear down the NEW connection instead of the one it
+// actually belongs to (liveAbort has since been reassigned). An explicit, caller-initiated
+// disconnect (button click, mode switch, starting a fresh connect) always calls this with no
+// argument — that one always means "tear down whatever is current," unconditionally.
+function disconnect(forController?: AbortController) {
+  if (forController && forController !== liveAbort) return; // superseded by a newer connection already
   if (liveAbort) { liveAbort.abort(); liveAbort = null; }
   ($('#connect-btn') as HTMLElement).hidden = false;
   ($('#disconnect-btn') as HTMLElement).hidden = true;
@@ -1158,7 +1175,10 @@ document.querySelectorAll<HTMLElement>('.tab').forEach((tab) => {
     document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
     tab.classList.add('active');
     const newMode = (tab.dataset.mode as 'position' | 'live' | 'play') ?? 'position';
-    if (newMode === 'position' && mode === 'live') disconnect();
+    // Leaving Live for ANY other mode (not just Position) must tear down the background stream —
+    // otherwise it keeps running and can still append moves/call render() against whatever mode
+    // (e.g. an in-progress Play vs Engine game) the user has since switched to.
+    if (newMode !== 'live' && mode === 'live') disconnect();
     mode = newMode;
     ($('#panel-position') as HTMLElement).hidden = mode !== 'position';
     ($('#panel-live') as HTMLElement).hidden = mode !== 'live';

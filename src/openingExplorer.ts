@@ -137,8 +137,15 @@ function syncUiToActiveProfile() {
 }
 
 // ---------- file loading (same pattern as Performance Analysis) ----------
-async function handleFiles(files: FileList | File[], forceUsername?: string) {
-  const p = active();
+// `profile` is resolved by the caller at the moment the user actually triggered the load (a click,
+// a drop), not by calling active() in here — this function runs after at least one await (reading
+// file contents), and the lichess/chess.com fetch flows below run after several more (a full
+// network round-trip), any of which gives the user time to switch the My Repertoire/Opponent Prep
+// tab before this code resumes. Resolving the target profile late would silently load into
+// whichever tab happens to be open when the network call *finishes*, not the one that was open when
+// it *started* — merging one profile's games into the other's.
+async function handleFiles(files: FileList | File[], profile: Profile, forceUsername?: string) {
+  const p = profile;
   let failed = 0;
   const failureCounts = new Map<string, { count: number; sample: string }>();
   const recordFailure = (f: ParseFailure) => {
@@ -180,15 +187,16 @@ async function handleFiles(files: FileList | File[], forceUsername?: string) {
   }
   fileSummary.innerHTML = html;
 
-  finalizeAfterLoad(forceUsername);
+  finalizeAfterLoad(p, forceUsername);
 }
 
-/** Sets the detected player for the active profile (auto-detected, or forced to a known
- *  username) and rebuilds everything downstream. Split out from handleFiles so the
- *  lichess/chess.com fetch flows — which already know exactly whose account they fetched — can
- *  skip the frequency heuristic entirely. */
-function finalizeAfterLoad(forceUsername?: string) {
-  const p = active();
+/** Sets the detected player for the given profile (auto-detected, or forced to a known username)
+ *  and rebuilds everything downstream. Split out from handleFiles so the lichess/chess.com fetch
+ *  flows — which already know exactly whose account they fetched — can skip the frequency
+ *  heuristic entirely. Takes the same profile handleFiles resolved, rather than re-resolving
+ *  active() itself, for the same late-resolution reason documented on handleFiles above. */
+function finalizeAfterLoad(profile: Profile, forceUsername?: string) {
+  const p = profile;
   if (!p.parsedGames.length) return;
   const detected = forceUsername
     ? { name: forceUsername, matchKeys: new Set([nameKey(forceUsername)]) }
@@ -258,7 +266,7 @@ function buildExplorerGames(parsedGames: ParsedGame[], matchKeys: Set<string>): 
 }
 
 fileInput.addEventListener('change', () => {
-  if (fileInput.files?.length) void handleFiles(fileInput.files);
+  if (fileInput.files?.length) void handleFiles(fileInput.files, active());
   fileInput.value = '';
 });
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -266,13 +274,14 @@ dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover
 dropzone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropzone.classList.remove('dragover');
-  if (e.dataTransfer?.files.length) void handleFiles(e.dataTransfer.files);
+  if (e.dataTransfer?.files.length) void handleFiles(e.dataTransfer.files, active());
 });
 $('#load-sample').addEventListener('click', async () => {
+  const profile = active(); // captured before the fetch below, not after
   const resp = await fetch(`${import.meta.env.BASE_URL}samples/sample-games.pgn`);
   const text = await resp.text();
   const file = new File([text], 'sample-games.pgn');
-  await handleFiles([file]);
+  await handleFiles([file], profile);
 });
 
 // ---------- lichess username bulk fetch ----------
@@ -287,6 +296,7 @@ async function fetchFromLichess() {
     lichessStatusEl.textContent = 'Enter a lichess username first.';
     return;
   }
+  const profile = active(); // captured now, not after the network round-trip below
   const max = lichessMaxSelect.value;
   lichessFetchBtn.disabled = true;
   lichessStatusEl.textContent = `Fetching up to ${max} games for ${username} from lichess… this can take a moment for larger counts.`;
@@ -302,7 +312,7 @@ async function fetchFromLichess() {
       return;
     }
     const file = new File([text], `${username}-lichess.pgn`);
-    await handleFiles([file], username);
+    await handleFiles([file], profile, username);
     lichessStatusEl.textContent = `Loaded games for ${username} from lichess.`;
   } catch (e) {
     lichessStatusEl.textContent = `Could not fetch from lichess: ${e instanceof Error ? e.message : String(e)}`;
@@ -332,6 +342,7 @@ async function fetchFromChessCom() {
     chesscomStatusEl.textContent = 'Enter a chess.com username first.';
     return;
   }
+  const profile = active(); // captured now, not after the network round-trips below
   const monthsBack = parseInt(chesscomMonthsSelect.value, 10);
   chesscomFetchBtn.disabled = true;
   chesscomStatusEl.textContent = `Fetching up to ${monthsBack} month(s) of games for ${username} from chess.com…`;
@@ -367,7 +378,7 @@ async function fetchFromChessCom() {
     }
     const text = allPgns.join('\n\n');
     const file = new File([text], `${username}-chesscom.pgn`);
-    await handleFiles([file], username);
+    await handleFiles([file], profile, username);
     chesscomStatusEl.textContent = `Loaded ${allPgns.length} game(s) for ${username} from chess.com.`;
   } catch (e) {
     chesscomStatusEl.textContent = `Could not fetch from chess.com: ${e instanceof Error ? e.message : String(e)}`;

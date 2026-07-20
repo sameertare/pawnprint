@@ -168,8 +168,8 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
   let reachedEndgame = false;
   let endgameType: string | null = null;
   let userMoveCount = 0;
-  const clockSeries: { moveNo: number; sec: number }[] = [];
-  const errorSeries: { moveNo: number; kind: 'inaccuracy' | 'mistake' | 'blunder' }[] = [];
+  const clockSeries: { moveNo: number; sec: number; phase: Phase }[] = [];
+  const errorSeries: { moveNo: number; kind: 'inaccuracy' | 'mistake' | 'blunder'; phase: Phase }[] = [];
 
   for (let i = 0; i < game.moves.length; i++) {
     const mv = game.moves[i];
@@ -182,7 +182,7 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
     userMoveCount++;
     if (mv.clockSec !== null) {
       clockDataAvailable = true;
-      clockSeries.push({ moveNo: mv.moveNo, sec: mv.clockSec });
+      clockSeries.push({ moveNo: mv.moveNo, sec: mv.clockSec, phase });
     }
     if (!analyzed) continue;
 
@@ -202,7 +202,7 @@ export async function analyzeGame(game: ParsedGame, opts: AnalyzeOptions): Promi
       errors[phase][
         kind === 'blunder' ? 'blunders' : kind === 'mistake' ? 'mistakes' : 'inaccuracies'
       ]++;
-      errorSeries.push({ moveNo: mv.moveNo, kind });
+      errorSeries.push({ moveNo: mv.moveNo, kind, phase });
       if (firstErrorMove === null) firstErrorMove = mv.moveNo;
       if (
         decisiveErrorMove === null &&

@@ -216,6 +216,12 @@ a { color: var(--blue); }
 .navlinks a:hover { background: var(--bg-inset); color: var(--text); }
 .navlinks a.active { background: var(--accent); color: #10140c; font-weight: 600; }
 
+.privacy-banner {
+  text-align: center; font-size: 0.82rem; padding: 7px 16px;
+  background: var(--bg-inset); color: var(--text-dim); border-bottom: 1px solid var(--border);
+}
+.privacy-banner strong { color: var(--accent); }
+
 /* ---------- hub ---------- */
 .hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
 .hub-card {
@@ -654,7 +660,7 @@ a { color: var(--blue); }
 .rating-notes li { color: var(--gold); font-size: 0.88rem; margin-bottom: 4px; }
 
 @media print {
-  .topnav, .btn, .config-row, #setup-card, #rounds, #section-tabs, #control-card, #standings-card,
+  .topnav, .privacy-banner, .btn, .config-row, #setup-card, #rounds, #section-tabs, #control-card, #standings-card,
   .app-footer, .app-header .tagline { display: none !important; }
   body { background: #fff; color: #000; }
   .card { border: none; }
@@ -737,7 +743,7 @@ textarea {
     --text: #000; --text-dim: #444; --accent: #3a612c; --accent-dark: #2c4a21;
     --gold: #8a6110; --red: #a8321f; --blue: #1f5590;
   }
-  .topnav, .app-footer, .app-header .tagline,
+  .topnav, .privacy-banner, .app-footer, .app-header .tagline,
   #load-card, #config-card, #export-card { display: none !important; }
   .card { border: 1px solid #ccc; box-shadow: none; break-inside: avoid; }
   table { break-inside: auto; }
