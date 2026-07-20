@@ -21,6 +21,8 @@ export class Engine {
   // wait its turn rather than racing and garbling both results.
   private queue: Promise<void> = Promise.resolve();
   private multiPvSet = 1;
+  // Bumped by cancelPending() — see enqueue() below.
+  private generation = 0;
 
   constructor(url: string = ENGINE_URL) {
     this.worker = new Worker(url);
@@ -62,9 +64,16 @@ export class Engine {
     this.multiPvSet = n;
   }
 
-  /** Run `job` after any prior queued search completes, keeping searches strictly sequential. */
-  private enqueue<T>(job: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(job);
+  /** Run `job` after any prior queued search completes, keeping searches strictly sequential.
+   *  `emptyResult` is what's returned instead of actually running `job` if this call was
+   *  superseded by cancelPending() before its turn in the queue came up — every caller already
+   *  discards a stale result via its own "is this still the position I care about" check once the
+   *  promise resolves, so skipping straight to that placeholder (rather than running a real,
+   *  possibly many-second search nobody wants anymore) is what lets cancelPending() actually free
+   *  up the queue instead of merely interrupting whichever one job happens to be active. */
+  private enqueue<T>(job: () => Promise<T>, emptyResult: T): Promise<T> {
+    const gen = this.generation;
+    const result = this.queue.then(() => (gen === this.generation ? job() : emptyResult));
     this.queue = result.then(
       () => undefined,
       () => undefined // don't let one failed search jam the queue for later callers
@@ -84,7 +93,7 @@ export class Engine {
     return this.enqueue(() => {
       this.setMultiPv(1);
       this.busy = true;
-      return new Promise((resolve) => {
+      return new Promise<EngineEval>((resolve) => {
         let lastCp = 0;
         let lastMate: number | null = null;
         let lastPv: string[] = [];
@@ -129,7 +138,7 @@ export class Engine {
         this.worker.postMessage('position fen ' + fen);
         this.worker.postMessage('go depth ' + depth);
       });
-    });
+    }, { cp: 0, mateIn: null, bestmove: null, pv: [], depth: 0 });
   }
 
   /**
@@ -140,7 +149,7 @@ export class Engine {
     return this.enqueue(() => {
       this.setMultiPv(multiPv);
       this.busy = true;
-      return new Promise((resolve) => {
+      return new Promise<EngineEval[]>((resolve) => {
         const lines = new Map<number, EngineEval>();
         const onMsg = (e: MessageEvent) => {
           const line = String(e.data);
@@ -175,12 +184,27 @@ export class Engine {
         this.worker.postMessage('position fen ' + fen);
         this.worker.postMessage('go depth ' + depth);
       });
-    });
+    }, []);
   }
 
   /** Interrupt an in-flight search (best-effort). */
   stop() {
     if (this.busy) this.worker.postMessage('stop');
+  }
+
+  /**
+   * Interrupts whatever's currently searching AND discards every not-yet-started job still
+   * waiting behind it in the queue — stop() alone only handles the former. In Play vs Engine,
+   * both a background eval (pump) and a multi-PV candidates search can get queued up while the
+   * user is thinking; calling only stop() when they move frees up whichever of those two happens
+   * to be the one currently running, but leaves the other to run to completion — at higher engine
+   * strength, that's a second many-second search the engine's actual reply is stuck waiting behind,
+   * which reads as the game being stuck. Call this right before enqueuing something that actually
+   * matters (the engine's real move) so it never queues up behind now-irrelevant background work.
+   */
+  cancelPending() {
+    this.generation++;
+    this.stop();
   }
 
   destroy() {
