@@ -88,38 +88,57 @@ export function isNwchessRoster(text: string): boolean {
 }
 
 /**
- * NWChess roster: fixed 16-column layout —
- * 0 section · 1 last · 2 first · 3 grade · 4 school · 5 NWSRS · 6 NWSRS-id ·
- * 7 USCF · 8 USCF-id · 9 USCF-exp · 10 FIDE · 11 FIDE-id · 12 title · 13 exp · 14 byes · 15 status.
- * FIDE is ignored; the pairing rating is max(NWSRS, USCF). Column 15 ("Status") carries the
- * withdrawn/paid marker — NOT column 0, which is the section/division (e.g. "Open", "U1000") and
- * is never itself a withdrawal indicator.
+ * NWChess roster: column 0 section · 1 last · 2 first · 3 grade are stable across every real
+ * export variant seen, but everything else is not — a section with no NWSRS-rated players omits
+ * the NWSRS (and often school) columns entirely rather than leaving them blank, shifting every
+ * later fixed index left. So instead of trusting fixed positions for the rating/byes/status
+ * columns, this anchors byes/status off the *end* of the row (consistently the last two columns
+ * in every variant seen) and finds the rating by scanning the whole row between grade and byes for
+ * any strictly-numeric token in a plausible rating range — an ID always runs 6+ digits (well past
+ * the 3500 ceiling), a grade or the month of an MM/YYYY expiry date is always under 100, so the
+ * range check alone reliably tells a rating apart from either regardless of which column it's
+ * actually in. The pairing rating is the max of whatever rating(s) are found (NWSRS/USCF, in
+ * whichever order and however many of them this export includes); FIDE is ignored.
  */
+const NWCHESS_HEADER_WORDS = /^(name|first|last|uscf|nwsrs|nwchess|fide|grade|school|byes|fees|id|rating|status|section|title)$/i;
 function parseNwchessRoster(text: string): RosterEntry[] {
   const out: RosterEntry[] = [];
   const seen = new Set<string>();
-  for (const raw of text.replace(/\r/g, '').split('\n')) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  // NWChess exports show up both as quoted comma-CSV and as tab-delimited (e.g. pasted straight
+  // out of a spreadsheet) — detected once from the first non-empty line, same approach
+  // parseHeaderTable already uses for the "table" format, rather than assuming CSV unconditionally
+  // and silently parsing zero columns (and thus zero players) out of a tab-delimited file.
+  const firstLine = lines.find((l) => l.trim()) ?? '';
+  const delim: 'tab' | 'csv' = firstLine.includes('\t') ? 'tab' : 'csv';
+  for (const raw of lines) {
     if (!raw.trim()) continue;
-    const c = parseCsvLine(raw).map((f) => f.trim());
+    const c = splitDelimited(raw, delim).map((f) => f.trim());
     if (c.length < 8) continue;
+    // Header/label rows vary in shape across real exports (which column has "Name" vs "First" in
+    // it differs between variants), so rather than check one fixed position for a literal label,
+    // treat any row with a known column-label word in an early column as a header, not a player.
+    if (c.slice(0, 5).some((f) => NWCHESS_HEADER_WORDS.test(f))) continue;
     const section = c[0];
     const last = c[1];
     const first = c[2];
-    const status = c[15] ?? '';
-    if (!last || last.toLowerCase() === 'name' || first.toLowerCase() === 'first') continue; // header rows
+    if (!last || !first) continue;
+    const status = c[c.length - 1] ?? '';
+    const byesRaw = c[c.length - 2];
     if (/withdr|^wd$|inactive|dropped/i.test(status) || /withdr/i.test(section)) continue; // not playing
-    const nwsrs = ratingOrNull(c[5]);
-    const uscf = ratingOrNull(c[7]);
-    // FIDE (c[10]) intentionally ignored.
-    const rated = [nwsrs, uscf].filter((x): x is number => x != null);
-    const rating = rated.length ? Math.max(...rated) : null;
+    const middle = c.slice(3, c.length - 2);
+    const ratings = middle
+      .filter((f) => /^\d+$/.test(f))
+      .map((f) => ratingOrNull(f))
+      .filter((n): n is number => n != null);
+    const rating = ratings.length ? Math.max(...ratings) : null;
     const name = `${first} ${last}`.replace(/\s{2,}/g, ' ').trim();
     if (!name) continue;
     // Only dedupe an exact name+rating repeat — see parsePlainList for why name alone isn't enough.
     const key = `${name.toLowerCase()} ${rating ?? ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const byeRounds = parseByeRounds(c[14]); // "Byes" column, e.g. "4,5"
+    const byeRounds = parseByeRounds(byesRaw); // second-to-last column, e.g. "4,5"
     out.push({ name, rating, section: section || undefined, ...(byeRounds.length ? { byeRounds } : {}) });
   }
   return out;
