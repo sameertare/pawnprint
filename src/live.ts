@@ -619,7 +619,13 @@ board.onSquareClick = (sq) => {
     // pieces, this is just "change my mind" reselection — not a mistake, no flash. Otherwise it
     // was a genuine illegal-move attempt (blocked path, pin, moving into check, etc.), and without
     // any feedback that silently does nothing, which reads as the whole board being unresponsive.
-    if (!(piece && piece.color === c.turn())) board.flashIllegal(sq);
+    const isOwnPiece = !!(piece && piece.color === c.turn());
+    board.setSelected(isOwnPiece ? sq : null);
+    // setSelected() above just rebuilt the whole board's DOM (it always re-renders) — flashIllegal
+    // has to run *after* that, not before, or the fresh render wipes out the flash class the same
+    // tick it's applied and the square never visibly flashes at all.
+    if (!isOwnPiece) board.flashIllegal(sq);
+    return;
   }
   if (piece && piece.color === c.turn()) board.setSelected(sq);
   else board.setSelected(null);
