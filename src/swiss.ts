@@ -398,10 +398,15 @@ $('#edit-roster-btn').addEventListener('click', () => {
   ($('#control-card') as HTMLElement).hidden = true;
   ($('#standings-card') as HTMLElement).hidden = true;
   // This is non-destructive — ev still points at the old tournament until "Create tournament" is
-  // actually clicked again — but the wall chart isn't something the setup screen should keep
-  // showing in the meantime; without this it lingers, showing stale data from the tournament being
-  // replaced while the user is in the middle of uploading a new roster.
+  // actually clicked again — but none of these are something the setup screen should keep showing
+  // in the meantime; without explicitly hiding each one here, it lingers with stale data from the
+  // tournament being replaced while the user is in the middle of uploading a new roster. These are
+  // exactly the cards renderAll() hides via `hidden = !hasE` on its normal path — this handler
+  // doesn't call renderAll() (it's non-destructive, ev is untouched), so it has to hide them itself.
   ($('#wallchart-card') as HTMLElement).hidden = true;
+  ($('#bye-request-card') as HTMLElement).hidden = true;
+  ($('#family-group-card') as HTMLElement).hidden = true;
+  ($('#player-status-card') as HTMLElement).hidden = true;
   previewRoster();
   ($('#setup-card') as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
