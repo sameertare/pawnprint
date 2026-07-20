@@ -5,7 +5,7 @@ import { Engine, ENGINE_NAME } from './engine';
 import type { EngineEval } from './engine';
 import { winPct } from './analyze';
 import { identifyOpening } from './openings';
-import { splitPgn } from './pgn';
+import { sanitizePgnText, splitPgn } from './pgn';
 import { mountInteractiveSparkline } from './sparkline';
 import { registerServiceWorker } from './pwa';
 import { initTheme } from './theme';
@@ -140,7 +140,11 @@ interface BuiltLine { line: Node[]; white?: string; black?: string; wr?: string;
 /** Build a full line from a PGN string. Returns null if it can't be parsed. */
 function buildLineFromPgn(pgn: string): BuiltLine | null {
   const c = new Chess();
-  try { c.loadPgn(pgn); } catch { return null; }
+  // A PGN pasted (rather than downloaded as a file) very often carries non-breaking spaces or
+  // curly quotes picked up from whatever page it was copied out of — chess.js's parser rejects
+  // those outright, which otherwise reads as "this PGN is broken" for an otherwise perfectly valid
+  // game. See sanitizePgnText's own doc comment for exactly which artifacts this handles.
+  try { c.loadPgn(sanitizePgnText(pgn)); } catch { return null; }
   const verbose = c.history({ verbose: true }) as any[];
   const h = c.header() as Record<string, string | null | undefined>;
   // chess.js defaults missing Seven Tag Roster headers to the literal string "?" — treat that

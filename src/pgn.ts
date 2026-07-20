@@ -27,11 +27,18 @@ export interface ParseFailure {
 const BOM_CODE = 0xfeff;
 
 /**
- * Drop stray control characters (other than tab/newline) that typically show up when a file got
- * decoded with the wrong text encoding, and a leading byte-order-mark if present. Written as a
- * char-code filter rather than a regex hex-range, to avoid escape-sequence corruption.
+ * Sanitizes text before it's handed to chess.js's strict PGN parser. Three real-world copy-paste
+ * artifacts otherwise make it reject an otherwise-valid PGN outright with an opaque "Expected ...
+ * but ... found" error the user just sees as "Could not parse that PGN": stray control characters
+ * and a leading byte-order-mark (from a file decoded with the wrong text encoding); Unicode
+ * whitespace variants — most commonly non-breaking space (U+00A0) — which show up constantly when
+ * a move list (especially one with inline clock/eval annotations, which a lot of sites deliberately
+ * pad with &nbsp; so a timestamp doesn't line-wrap) is copied straight out of a rendered webpage
+ * rather than downloaded as a real PGN file; and curly "smart" quotes, which a word processor or
+ * some sites' auto-formatting can substitute for the straight quotes a PGN tag pair's value must be
+ * delimited by (`[White "Name"]`), silently breaking the header syntax itself.
  */
-function stripStrayControlChars(text: string): string {
+export function sanitizePgnText(text: string): string {
   let out = '';
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
@@ -40,12 +47,18 @@ function stripStrayControlChars(text: string): string {
     const isAllowedWhitespace = code === 9 || code === 10 || code === 13; // tab, newline, CR
     if (isPrintable || isAllowedWhitespace) out += text[i];
   }
-  return out;
+  return out
+    // Unicode whitespace variants -> plain space (U+00A0 nbsp, U+1680 ogham space, U+2000-
+    // U+200A the various en/em/thin/hair spaces, U+202F narrow no-break, U+205F medium math,
+    // U+3000 ideographic, U+FEFF zero-width no-break appearing mid-string).
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\uFEFF]/g, ' ')
+    .replace(/[\u2018\u2019\u201B]/g, "'") // curly single quotes -> straight
+    .replace(/[\u201C\u201D\u201F]/g, '"'); // curly double quotes -> straight
 }
 
 /** Split a file that may contain many games into individual PGN chunks. */
 export function splitPgn(text: string): string[] {
-  const normalized = stripStrayControlChars(text).replace(/\r\n?/g, '\n').trim();
+  const normalized = sanitizePgnText(text).replace(/\r\n?/g, '\n').trim();
   if (!normalized) return [];
   const chunks = normalized.split(/\n(?=\[Event\s)/g);
   return chunks.map((c) => c.trim()).filter((c) => c.length > 0 && /\[\w+\s/.test(c));
