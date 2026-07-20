@@ -397,6 +397,11 @@ $('#edit-roster-btn').addEventListener('click', () => {
   ($('#setup-card') as HTMLElement).hidden = false;
   ($('#control-card') as HTMLElement).hidden = true;
   ($('#standings-card') as HTMLElement).hidden = true;
+  // This is non-destructive — ev still points at the old tournament until "Create tournament" is
+  // actually clicked again — but the wall chart isn't something the setup screen should keep
+  // showing in the meantime; without this it lingers, showing stale data from the tournament being
+  // replaced while the user is in the middle of uploading a new roster.
+  ($('#wallchart-card') as HTMLElement).hidden = true;
   previewRoster();
   ($('#setup-card') as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -457,7 +462,14 @@ function renderAll() {
   const t = cur();
   ($('#standings-card') as HTMLElement).hidden = !t || !t.rounds.length;
   renderPrintArea();
-  if (!ev || !t) return;
+  if (!ev || !t) {
+    // No current tournament (just deleted/reset, or none created yet) — renderWallChart() below
+    // never runs past this point, so without this it would leave whatever the *previous*
+    // tournament last rendered sitting on screen instead of resetting.
+    ($('#wallchart-card') as HTMLElement).hidden = true;
+    $('#wallchart').innerHTML = '';
+    return;
+  }
 
   renderSectionTabs();
   const rr = t.totalRounds ?? recommendedRounds(t.players.length);
@@ -1012,7 +1024,7 @@ function wallChartHtml(t: Tournament): string {
 
 function renderWallChart(t: Tournament) {
   const card = $('#wallchart-card') as HTMLElement;
-  if (!t.rounds.length) { card.hidden = true; return; }
+  if (!t.rounds.length) { card.hidden = true; $('#wallchart').innerHTML = ''; return; }
   card.hidden = false;
   $('#wallchart').innerHTML = wallChartHtml(t);
 }
