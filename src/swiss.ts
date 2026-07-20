@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  addExtraGameForBye, addFamilyGroup, cancelByeRequest, commitRound, createTournament,
+  addExtraGameForBye, addFamilyGroup, cancelByeRequest, commitRound, createTournament, estimatedCurrentRating,
   explainPairing, explainPairingDetail, explainRound, isNwchessRoster, nextRoundNumber, pairNextRound, parseRoster,
   recommendedRounds, redoLatestRound, removeFamilyGroup, requestByeForRound, setResult, standings,
   swapByeWithPlayer, swapColors, swapPlayersAcrossBoards,
@@ -51,12 +51,18 @@ function nameOf(t: Tournament, id: number | null): string {
   if (id == null) return '—';
   return t.players.find((p) => p.id === id)?.name ?? '—';
 }
-/** Name with rating in brackets, e.g. "Ava Thompson (1580)" — "(unrated)" when there's none. */
-function nameWithRatingOf(t: Tournament, id: number | null): string {
+/** Name with rating in brackets, e.g. "Ava Thompson (1580)" — "(unrated)" when there's none. When
+ *  `showEstimate` is true and the player has actual result history this event, also appends a
+ *  second bracket with a lightweight running rating estimate reflecting results so far — purely
+ *  informational, never used for pairing/seeding (see estimatedCurrentRating's own doc comment). */
+function nameWithRatingOf(t: Tournament, id: number | null, showEstimate = false): string {
   if (id == null) return '—';
   const p = t.players.find((p) => p.id === id);
   if (!p) return '—';
-  return `${p.name} (${p.rating ?? 'unrated'})`;
+  const base = `${p.name} (${p.rating ?? 'unrated'})`;
+  if (!showEstimate) return base;
+  const est = estimatedCurrentRating(t, id);
+  return est != null && est !== p.rating ? `${base} [~${est}]` : base;
 }
 
 // ---------- setup ----------
@@ -767,7 +773,7 @@ function renderRounds(t: Tournament) {
             if (isAdding) {
               return `<tr><td class="num">${pr.board}</td><td colspan="3">
                 <div class="extra-game-form">
-                  <b>${esc(nameWithRatingOf(t, pr.byeId))}</b> vs
+                  <b>${esc(nameWithRatingOf(t, pr.byeId, isLatestRound))}</b> vs
                   <input type="text" class="text-input extra-name" placeholder="Opponent name" />
                   <input type="number" class="text-input extra-rating" placeholder="Rating (optional)" min="100" max="3500" />
                   <button class="btn btn-primary btn-sm add-extra-confirm" data-round="${round.number}" data-bye="${pr.byeId}">Pair →</button>
@@ -775,13 +781,13 @@ function renderRounds(t: Tournament) {
                 </div>
               </td></tr>`;
             }
-            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId))}</b></td><td class="mid">${label} ${explainBtn}</td></tr>${explainRow}`;
+            return `<tr><td class="num">${pr.board}</td><td colspan="2"><b>${esc(nameWithRatingOf(t, pr.byeId, isLatestRound))}</b></td><td class="mid">${label} ${explainBtn}</td></tr>${explainRow}`;
           }
           const sel = (val: string, cur: GameResult) => `<option value="${val}"${cur === val ? ' selected' : ''}>`;
           return `<tr>
             <td class="num">${pr.board}</td>
-            <td>♔ ${esc(nameWithRatingOf(t, pr.whiteId))}</td>
-            <td>♚ ${esc(nameWithRatingOf(t, pr.blackId))}</td>
+            <td>♔ ${esc(nameWithRatingOf(t, pr.whiteId, isLatestRound))}</td>
+            <td>♚ ${esc(nameWithRatingOf(t, pr.blackId, isLatestRound))}</td>
             <td>
               <select class="result-sel" data-round="${round.number}" data-board="${pr.board}">
                 <option value=""${pr.result == null ? ' selected' : ''}>— result —</option>
@@ -812,7 +818,7 @@ function renderRounds(t: Tournament) {
                  </select>
                  <button class="btn btn-ghost btn-sm swap-bye-btn" data-round="${round.number}" data-bye="${pr.byeId}">Swap</button>`
               : '';
-            return `<div class="advanced-row"><b>${esc(nameWithRatingOf(t, pr.byeId!))}</b>'s bye — ${addBtn} ${swapControl}</div>`;
+            return `<div class="advanced-row"><b>${esc(nameWithRatingOf(t, pr.byeId!, isLatestRound))}</b>'s bye — ${addBtn} ${swapControl}</div>`;
           })
           .join('');
         const swapColorsRow = realPairings.length
@@ -843,8 +849,12 @@ function renderRounds(t: Tournament) {
         ? `<details class="round-advanced"><summary>⚙ Fix a mistake in this round</summary>${advancedBody}</details>`
         : '';
 
+      const estimateHint = isLatestRound && round.number > 1
+        ? `<p class="hint">Ratings in <code>[~brackets]</code> are an unofficial running estimate from this event's results so far — not the player's real rating, and never used for pairing.</p>`
+        : '';
       return `<div class="round-block">
         <h3>Round ${round.number} ${round.complete ? '<span class="pos">✓ complete</span>' : '<span class="hint">in progress</span>'}</h3>
+        ${estimateHint}
         <table><thead><tr><th class="num">Bd</th><th>White</th><th>Black</th><th>Result</th></tr></thead>
         <tbody>${rows}</tbody></table>
         ${roundMethodologyHtml(t, round.number)}

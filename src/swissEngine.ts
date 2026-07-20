@@ -1148,6 +1148,41 @@ export function setResult(t: Tournament, roundNo: number, board: number, result:
   round.complete = round.pairings.every((p) => p.byeId != null || p.result != null);
 }
 
+const ESTIMATE_K = 32;
+
+/**
+ * A lightweight, unofficial running Elo-style estimate of a player's rating given only this
+ * event's results so far — purely informational (shown alongside a player's real entering rating
+ * so a TD/parent can see roughly how the event is trending for them). Never used for seeding or
+ * pairing, which always uses the roster's original entering rating throughout the whole event,
+ * exactly like a real Swiss tournament (official ratings aren't recalculated mid-event either).
+ *
+ * Walks every round played so far and, for each one where this player had a real game (not a bye)
+ * with a result already entered against a rated opponent, applies a standard Elo update — each
+ * round's expected score is computed off the *running* estimate from the previous round, not the
+ * original entering rating, the same way an actual incremental rating update compounds. Byes and
+ * games against an unrated/house opponent are skipped (there's no rating on the other side to
+ * update against). Returns null if the player has no rating to begin with.
+ */
+export function estimatedCurrentRating(t: Tournament, playerId: number): number | null {
+  const player = t.players.find((p) => p.id === playerId);
+  if (!player || player.rating == null) return null;
+  const byId = new Map(t.players.map((p) => [p.id, p]));
+  let rating = player.rating;
+  for (const round of t.rounds) {
+    const pr = round.pairings.find((p) => p.whiteId === playerId || p.blackId === playerId);
+    if (!pr || pr.result == null) continue; // bye, or this round's result isn't in yet
+    const isWhite = pr.whiteId === playerId;
+    const oppId = isWhite ? pr.blackId : pr.whiteId;
+    const opponent = oppId != null ? byId.get(oppId) : undefined;
+    if (!opponent || opponent.rating == null) continue;
+    const actual = pr.result === '1/2-1/2' ? 0.5 : (pr.result === '1-0') === isWhite ? 1 : 0;
+    const expected = 1 / (1 + Math.pow(10, (opponent.rating - rating) / 400));
+    rating += ESTIMATE_K * (actual - expected);
+  }
+  return Math.round(rating);
+}
+
 // ---------------- standings & tiebreaks ----------------
 export interface Standing {
   rank: number;
