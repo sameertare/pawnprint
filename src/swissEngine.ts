@@ -953,6 +953,46 @@ export function addExtraGameForBye(
 }
 
 /**
+ * Discards the most recently paired round entirely and generates a fresh one in its place — the
+ * same pairNextRound() logic, run again from the same pre-round state, honoring whatever family
+ * groups, bye requests, or withdrawals are configured *now*. For when a TD adds a family/sibling
+ * group (or withdraws a player, or fixes a bye request) only *after* already pairing a round that
+ * predates it, and wants a clean re-roll under the new constraints rather than manually swapping
+ * specific boards with swapPlayersAcrossBoards. Only valid for the latest round, and only before
+ * any result on it has been entered — same restriction as every other "fix a mistake" tool, since
+ * undoing a round with results already recorded would need to unwind scores/standings too.
+ */
+export function redoLatestRound(t: Tournament): boolean {
+  const round = t.rounds[t.rounds.length - 1];
+  if (!round) return false;
+  if (round.pairings.some((p) => p.result != null)) return false;
+
+  // Undo this round's effect on every player, exactly reversing what commitRound applied.
+  const byId = new Map(t.players.map((p) => [p.id, p]));
+  for (const pr of round.pairings) {
+    if (pr.byeId != null) {
+      const p = byId.get(pr.byeId);
+      if (!p) continue;
+      const points = pr.byePoints ?? 1;
+      p.score -= points;
+      p.opponents.pop();
+      if (points === 0.5) p.requestedByes = Math.max(0, (p.requestedByes ?? 0) - 1);
+      else p.byes = Math.max(0, (p.byes ?? 0) - 1);
+    } else {
+      const w = pr.whiteId != null ? byId.get(pr.whiteId) : undefined;
+      const b = pr.blackId != null ? byId.get(pr.blackId) : undefined;
+      w?.opponents.pop(); w?.colors.pop();
+      b?.opponents.pop(); b?.colors.pop();
+    }
+  }
+  t.rounds.pop();
+
+  const fresh = pairNextRound(t);
+  commitRound(t, fresh);
+  return true;
+}
+
+/**
  * Swaps which of the two paired players is White vs Black on a board — e.g. the TD notices
  * colors were assigned backwards. Whoever actually won stays the winner: if a result was already
  * entered, it's flipped (1-0 ↔ 0-1) along with the colors so the recorded outcome still points at

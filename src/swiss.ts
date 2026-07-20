@@ -2,7 +2,7 @@ import './style.css';
 import {
   addExtraGameForBye, addFamilyGroup, cancelByeRequest, commitRound, createTournament,
   explainPairing, explainPairingDetail, explainRound, isNwchessRoster, nextRoundNumber, pairNextRound, parseRoster,
-  recommendedRounds, removeFamilyGroup, requestByeForRound, setResult, standings,
+  recommendedRounds, redoLatestRound, removeFamilyGroup, requestByeForRound, setResult, standings,
   swapByeWithPlayer, swapColors, swapPlayersAcrossBoards,
 } from './swissEngine';
 import type { GameResult, RosterEntry, RosterFormat, Tournament } from './swissEngine';
@@ -828,7 +828,11 @@ function renderRounds(t: Tournament) {
               <button class="btn btn-ghost btn-sm swap-players-btn" data-round="${round.number}">Swap</button>
             </div>`
           : '';
-        advancedBody = byeRows + swapColorsRow + swapBoardsControl;
+        const anyResultEntered = round.pairings.some((p) => p.result != null);
+        const redoRow = !anyResultEntered
+          ? `<div class="advanced-row"><button class="btn btn-ghost btn-sm redo-round-btn" data-round="${round.number}">🔁 Re-pair this round</button> <span class="hint">Discards these pairings and generates a fresh set — useful if you added a family group, changed a bye request, or withdrew a player after this round was already paired.</span></div>`
+          : '';
+        advancedBody = redoRow + byeRows + swapColorsRow + swapBoardsControl;
       }
       const advancedPanel = advancedBody
         ? `<details class="round-advanced"><summary>⚙ Fix a mistake in this round</summary>${advancedBody}</details>`
@@ -895,6 +899,18 @@ function renderRounds(t: Tournament) {
       const ok = addExtraGameForBye(t2, roundNo, byeId, name, rating);
       if (!ok) { alert('Could not add this game — the bye may no longer be available.'); return; }
       addingExtraFor = null;
+      save();
+      renderAll();
+    });
+  });
+
+  el.querySelectorAll<HTMLButtonElement>('.redo-round-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      const t2 = cur();
+      if (!t2) return;
+      if (!confirm('Discard this round\'s pairings and generate a fresh set? This re-applies the current family groups, bye requests, and withdrawals — it will not touch any earlier round.')) return;
+      const ok = redoLatestRound(t2);
+      if (!ok) { alert('Could not re-pair this round — a result may already have been entered on one of its boards.'); return; }
       save();
       renderAll();
     });
