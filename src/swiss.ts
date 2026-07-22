@@ -484,10 +484,14 @@ function renderAll() {
 
   renderSectionTabs();
   const rr = t.totalRounds ?? recommendedRounds(t.players.length);
-  const roundsPlayed = t.rounds.length;
+  const pairedRounds = t.rounds.length; // rounds paired/created so far, including one still in progress
+  // "Rounds played" means results are actually in, not just paired — a freshly-paired round with
+  // no results entered yet shouldn't count, or the summary reads as the event being further along
+  // (even fully done, if it happens to be the last scheduled round) than it actually is.
+  const completedRounds = t.rounds.filter((r) => r.complete).length;
   const evLabel = ev.sections.length > 1
-    ? `<b>${esc(ev.name)}</b> · ${ev.sections.length} sections · round ${roundsPlayed} · viewing <b>${esc(t.name)}</b> (${t.players.length} players, ${roundsPlayed}/${rr} rounds)`
-    : `<b>${esc(t.name)}</b> · ${t.players.length} players · ${roundsPlayed}/${rr} rounds played`;
+    ? `<b>${esc(ev.name)}</b> · ${ev.sections.length} sections · round ${pairedRounds} · viewing <b>${esc(t.name)}</b> (${t.players.length} players, ${completedRounds}/${rr} rounds)`
+    : `<b>${esc(t.name)}</b> · ${t.players.length} players · ${completedRounds}/${rr} rounds played`;
   $('#round-info').innerHTML = evLabel;
 
   renderRounds(t);

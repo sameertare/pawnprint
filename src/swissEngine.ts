@@ -1151,36 +1151,65 @@ export function setResult(t: Tournament, roundNo: number, board: number, result:
 const ESTIMATE_K = 32;
 
 /**
+ * A player's rating as of just before `roundIndex` (0-based into t.rounds): their real entering
+ * rating if they have one, otherwise bootstrapped off the *opponent's* rating at the time of their
+ * first counted game (the same "assumed equal to whoever you first played" convention real
+ * provisional-rating systems use), then the same running Elo update every round after compounds
+ * on top of. The opponent's own rating is itself resolved the same way, recursively — so a game
+ * against a player who was themselves unrated still counts once *their* rating becomes knowable,
+ * rather than being silently skipped just because their roster entry has no rating. Recursion only
+ * ever looks at strictly earlier rounds, so it always terminates; `memo` (keyed by
+ * "playerId:roundIndex", a value that's the same no matter who's asking) avoids recomputing the
+ * same subtree over and over across a whole tournament's worth of these lookups. If two players who
+ * are *both* unrated (and neither has any earlier resolvable rating) meet, there's genuinely no
+ * information to anchor either side to yet, so that game is skipped for both.
+ */
+function ratingAsOfRound(
+  t: Tournament,
+  playerId: number,
+  roundIndex: number,
+  byId: Map<number, Player>,
+  memo: Map<string, number | null>
+): number | null {
+  const key = `${playerId}:${roundIndex}`;
+  if (memo.has(key)) return memo.get(key)!;
+  const player = byId.get(playerId);
+  let rating: number | null = player?.rating ?? null;
+  if (player) {
+    for (let i = 0; i < roundIndex; i++) {
+      const round = t.rounds[i];
+      const pr = round.pairings.find((p) => p.whiteId === playerId || p.blackId === playerId);
+      if (!pr || pr.result == null) continue; // bye, or that round's result isn't in yet
+      const isWhite = pr.whiteId === playerId;
+      const oppId = isWhite ? pr.blackId : pr.whiteId;
+      if (oppId == null) continue;
+      let oppRating = ratingAsOfRound(t, oppId, i, byId, memo);
+      if (oppRating == null && rating == null) continue; // neither side has any rating info to anchor to
+      if (oppRating == null) oppRating = rating!; // opponent has no info of their own — assume even odds
+      if (rating == null) rating = oppRating;
+      const actual = pr.result === '1/2-1/2' ? 0.5 : (pr.result === '1-0') === isWhite ? 1 : 0;
+      const expected = 1 / (1 + Math.pow(10, (oppRating - rating) / 400));
+      rating += ESTIMATE_K * (actual - expected);
+    }
+  }
+  memo.set(key, rating);
+  return rating;
+}
+
+/**
  * A lightweight, unofficial running Elo-style estimate of a player's rating given only this
  * event's results so far — purely informational (shown alongside a player's real entering rating
  * so a TD/parent can see roughly how the event is trending for them). Never used for seeding or
  * pairing, which always uses the roster's original entering rating throughout the whole event,
  * exactly like a real Swiss tournament (official ratings aren't recalculated mid-event either).
- *
- * Walks every round played so far and, for each one where this player had a real game (not a bye)
- * with a result already entered against a rated opponent, applies a standard Elo update — each
- * round's expected score is computed off the *running* estimate from the previous round, not the
- * original entering rating, the same way an actual incremental rating update compounds. Byes and
- * games against an unrated/house opponent are skipped (there's no rating on the other side to
- * update against). Returns null if the player has no rating to begin with.
+ * Works for an originally-unrated player too — see ratingAsOfRound's own doc comment. Returns null
+ * only if the player (and, transitively, everyone they've played) has no rating information at all
+ * yet — nothing to estimate from.
  */
 export function estimatedCurrentRating(t: Tournament, playerId: number): number | null {
-  const player = t.players.find((p) => p.id === playerId);
-  if (!player || player.rating == null) return null;
   const byId = new Map(t.players.map((p) => [p.id, p]));
-  let rating = player.rating;
-  for (const round of t.rounds) {
-    const pr = round.pairings.find((p) => p.whiteId === playerId || p.blackId === playerId);
-    if (!pr || pr.result == null) continue; // bye, or this round's result isn't in yet
-    const isWhite = pr.whiteId === playerId;
-    const oppId = isWhite ? pr.blackId : pr.whiteId;
-    const opponent = oppId != null ? byId.get(oppId) : undefined;
-    if (!opponent || opponent.rating == null) continue;
-    const actual = pr.result === '1/2-1/2' ? 0.5 : (pr.result === '1-0') === isWhite ? 1 : 0;
-    const expected = 1 / (1 + Math.pow(10, (opponent.rating - rating) / 400));
-    rating += ESTIMATE_K * (actual - expected);
-  }
-  return Math.round(rating);
+  const rating = ratingAsOfRound(t, playerId, t.rounds.length, byId, new Map());
+  return rating != null ? Math.round(rating) : null;
 }
 
 // ---------------- standings & tiebreaks ----------------
